@@ -16,6 +16,7 @@ interface LayoutProps {
   children: React.ReactNode;
   setCurrentStep: (step: AppStep) => void;
   onSettingsOpen: () => void;
+  headerRight?: React.ReactNode;
 }
 
 const steps = [
@@ -28,7 +29,7 @@ const steps = [
   { id: AppStep.REVIEW_DOWNLOAD, label: '최종 및 다운로드', icon: Download },
 ];
 
-export const Layout: React.FC<LayoutProps> = ({ currentStep, children, setCurrentStep, onSettingsOpen }) => {
+export const Layout: React.FC<LayoutProps> = ({ currentStep, children, setCurrentStep, onSettingsOpen, headerRight }) => {
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
       {/* Sidebar */}
@@ -94,8 +95,13 @@ export const Layout: React.FC<LayoutProps> = ({ currentStep, children, setCurren
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto relative">
-        <div className="max-w-5xl mx-auto p-8 pb-20">
+      <main className="flex-1 overflow-auto relative flex flex-col">
+        {headerRight && (
+          <div className="w-full p-4 flex justify-end border-b border-slate-200 bg-white shadow-sm z-10">
+            {headerRight}
+          </div>
+        )}
+        <div className="max-w-5xl mx-auto p-8 pb-20 w-full flex-1">
             {children}
         </div>
       </main>

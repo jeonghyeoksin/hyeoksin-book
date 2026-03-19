@@ -32,14 +32,26 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
   const [hasApiKey, setHasApiKey] = useState(false);
+  const [customApiKey, setCustomApiKey] = useState('');
+  const [apiKeyInput, setApiKeyInput] = useState('');
+
+  const checkKey = async () => {
+    const storedKey = localStorage.getItem('custom_gemini_api_key');
+    if (storedKey) {
+      setCustomApiKey(storedKey);
+      setApiKeyInput(storedKey);
+      setHasApiKey(true);
+      return;
+    }
+    if ((window as any).aistudio) {
+      const has = await (window as any).aistudio.hasSelectedApiKey();
+      setHasApiKey(has);
+    } else {
+      setHasApiKey(false);
+    }
+  };
 
   useEffect(() => {
-    const checkKey = async () => {
-      if ((window as any).aistudio) {
-        const has = await (window as any).aistudio.hasSelectedApiKey();
-        setHasApiKey(has);
-      }
-    };
     checkKey();
   }, []);
 
@@ -47,6 +59,20 @@ const App: React.FC = () => {
     if ((window as any).aistudio) {
       await (window as any).aistudio.openSelectKey();
       setHasApiKey(true);
+    }
+  };
+
+  const handleSaveApiKey = async () => {
+    if (apiKeyInput.trim()) {
+      localStorage.setItem('custom_gemini_api_key', apiKeyInput.trim());
+      setCustomApiKey(apiKeyInput.trim());
+      setHasApiKey(true);
+      alert('API 키가 적용되었습니다.');
+    } else {
+      localStorage.removeItem('custom_gemini_api_key');
+      setCustomApiKey('');
+      await checkKey();
+      alert('API 키가 삭제되었습니다.');
     }
   };
   
@@ -382,13 +408,13 @@ const App: React.FC = () => {
       {/* 16:9 Hero Banner */}
       <div className="w-full aspect-video relative rounded-3xl overflow-hidden shadow-2xl mb-12 flex items-center justify-center group">
         <img 
-          src="https://images.unsplash.com/photo-1620712943543-bcc4688e7485?q=80&w=2000&auto=format&fit=crop" 
+          src="https://images.unsplash.com/photo-1532012197267-da84d127e765?q=80&w=2000&auto=format&fit=crop" 
           alt="Innovation E-book AI Hero" 
           className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
           referrerPolicy="no-referrer"
         />
         <div className="absolute inset-0 bg-gradient-to-br from-indigo-900/90 via-purple-900/80 to-slate-900/90 mix-blend-multiply"></div>
-        <div className="absolute inset-0 bg-black/20"></div>
+        <div className="absolute inset-0 bg-black/30"></div>
         
         <div className="relative z-10 text-center px-6 flex flex-col items-center">
           <div className="inline-flex items-center justify-center p-4 bg-white/10 backdrop-blur-md rounded-2xl mb-6 border border-white/20 shadow-2xl">
@@ -408,14 +434,14 @@ const App: React.FC = () => {
         {!hasApiKey && (
           <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl w-full">
             <p className="text-amber-800 text-sm mb-3 text-center">
-              이미지 생성을 위해 유료 API 키 선택이 필요합니다.
+              AI Studio 환경인 경우 아래 버튼으로 API 키를 선택할 수 있습니다.
             </p>
             <button 
               onClick={handleOpenKeySelection}
               className="flex items-center justify-center gap-2 w-full py-2 bg-amber-600 text-white rounded-lg font-bold hover:bg-amber-700 transition-colors"
             >
               <Key size={18} />
-              API 키 선택하기
+              AI Studio API 키 선택하기
             </button>
           </div>
         )}
@@ -824,11 +850,43 @@ const App: React.FC = () => {
     }
   };
 
+  const renderHeaderRight = () => (
+    <div className="flex items-center gap-3">
+      {/* Status Indicator */}
+      <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border ${
+        hasApiKey 
+          ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+          : 'bg-rose-50 text-rose-700 border-rose-200'
+      }`}>
+        <div className={`w-2 h-2 rounded-full ${hasApiKey ? 'bg-emerald-500' : 'bg-rose-500 animate-pulse'}`}></div>
+        {hasApiKey ? 'API 키 적용됨' : 'API 키 미적용'}
+      </div>
+
+      <div className="flex items-center bg-slate-100 rounded-lg p-1 border border-slate-200">
+        <Key size={16} className="text-slate-500 ml-2" />
+        <input 
+          type="password" 
+          value={apiKeyInput}
+          onChange={(e) => setApiKeyInput(e.target.value)}
+          placeholder="Gemini API Key"
+          className="w-48 px-3 py-1.5 bg-transparent text-sm focus:outline-none text-slate-700"
+        />
+        <button 
+          onClick={handleSaveApiKey}
+          className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-md hover:bg-indigo-700 transition-colors"
+        >
+          저장
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <Layout 
       currentStep={currentStep} 
       setCurrentStep={setCurrentStep}
       onSettingsOpen={handleOpenKeySelection}
+      headerRight={renderHeaderRight()}
     >
       {getStepContent()}
     </Layout>

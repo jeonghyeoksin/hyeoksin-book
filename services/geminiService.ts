@@ -8,7 +8,8 @@ const IMAGE_MODEL = 'gemini-3.0-pro-nanobanana';
  * Helper to get a fresh GoogleGenAI instance with the current API key.
  */
 const getAI = () => {
-  const apiKey = process.env.API_KEY || '';
+  const customKey = localStorage.getItem('custom_gemini_api_key');
+  const apiKey = customKey || process.env.API_KEY || '';
   return new GoogleGenAI({ apiKey });
 };
 
