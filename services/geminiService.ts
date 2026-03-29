@@ -2,7 +2,7 @@ import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 
 // Model Constants
 const TEXT_MODEL = 'gemini-3.1-pro-preview';
-const IMAGE_MODEL = 'gemini-3.0-pro-nanobanana';
+const IMAGE_MODEL = 'gemini-3.1-flash-image-preview';
 
 /**
  * Helper to get a fresh GoogleGenAI instance with the current API key.
@@ -224,15 +224,22 @@ export const generateImage = async (prompt: string, aspectRatio: '3:4' | '4:3' =
       config: {
         imageConfig: {
           aspectRatio: aspectRatio,
+          imageSize: "1K"
         }
       }
     }));
 
-    for (const part of response.candidates?.[0]?.content?.parts || []) {
+    if (!response.candidates || response.candidates.length === 0) {
+      console.error("No candidates in image generation response");
+      return "";
+    }
+
+    for (const part of response.candidates[0].content.parts || []) {
       if (part.inlineData && part.inlineData.data) {
         return part.inlineData.data;
       }
     }
+    console.warn("No inlineData found in image generation parts");
     return "";
   } catch (error) {
     console.error("Image generation failed:", error);

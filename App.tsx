@@ -258,11 +258,17 @@ const App: React.FC = () => {
         // --- PHASE 3: COVER DESIGN ---
         if (currentStep <= AppStep.WRITING) {
             setCurrentStep(AppStep.COVER_DESIGN);
-            setLoadingMessage('표지 디자인 생성 중...');
+            setLoadingMessage('표지 디자인 프롬프트 생성 중...');
             setAutomationProgress(70);
             
             const coverPrompt = await geminiService.generateImagePrompt(`Title: ${localEbookState.title}, Topic: ${localEbookState.topic}`, 'cover');
+            if (!coverPrompt) throw new Error("표지 프롬프트 생성 실패");
+            
+            setLoadingMessage('표지 이미지를 렌더링 중입니다...');
+            setAutomationProgress(75);
             const coverImage = await geminiService.generateImage(coverPrompt, '3:4');
+            if (!coverImage) throw new Error("표지 이미지 생성 실패");
+            
             localEbookState = { ...localEbookState, coverPrompt, coverImage };
             setEbook(localEbookState);
             setAutomationProgress(80);
@@ -272,7 +278,7 @@ const App: React.FC = () => {
         // --- PHASE 4: ILLUSTRATIONS ---
         if (currentStep <= AppStep.COVER_DESIGN) {
             setCurrentStep(AppStep.ILLUSTRATION);
-            setLoadingMessage('삽화 생성 중...');
+            setLoadingMessage('각 챕터별 삽화 생성 준비 중...');
             
             const chaptersWithImages = [...localEbookState.chapters];
             for (let i = 0; i < chaptersWithImages.length; i++) {
@@ -284,13 +290,17 @@ const App: React.FC = () => {
                     `Chapter Title: ${chaptersWithImages[i].title}. Content summary: ${chaptersWithImages[i].content.slice(0, 200)}...`, 
                     'illustration'
                 );
-                const imgData = await geminiService.generateImage(illPrompt, '4:3');
-                chaptersWithImages[i].imagePrompt = illPrompt;
-                chaptersWithImages[i].imageData = imgData;
+                
+                if (illPrompt) {
+                    const imgData = await geminiService.generateImage(illPrompt, '4:3');
+                    chaptersWithImages[i].imagePrompt = illPrompt;
+                    chaptersWithImages[i].imageData = imgData;
+                }
                 
                 localEbookState = { ...localEbookState, chapters: [...chaptersWithImages] };
                 setEbook(prev => ({ ...prev, chapters: [...chaptersWithImages] }));
                 setIllustrationProgress(((i + 1) / chaptersWithImages.length) * 100);
+                await new Promise(resolve => setTimeout(resolve, 500));
             }
             setAutomationProgress(95);
             await new Promise(resolve => setTimeout(resolve, 1000));
@@ -492,6 +502,7 @@ const App: React.FC = () => {
               className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-lg shadow-sm bg-white"
             >
               <option value="AI추천">AI 추천 (자동 최적화)</option>
+              <option value="10">10페이지 내외</option>
               <option value="20">20페이지 내외</option>
               <option value="30">30페이지 내외</option>
               <option value="50">50페이지 내외</option>
