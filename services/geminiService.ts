@@ -52,8 +52,9 @@ export const generateTopics = async (
     
     [필수 요구사항]
     1. 각 주제는 '제목'과 '설명'으로 구성되어야 합니다.
-    2. **모든 제안된 주제의 '제목'에는 반드시 입력된 키워드 "${keyword}"가 포함되어야 합니다.**
-    3. 첨부파일이 있다면 해당 파일의 내용(이미지, 텍스트 등)을 적극적으로 반영하여 주제를 선정해주세요.
+    2. **추천순(가장 매력적이고 시장성 있는 순서)으로 3가지를 제안해주세요.**
+    3. **모든 제안된 주제의 '제목'에는 반드시 입력된 키워드 "${keyword}"가 포함되어야 합니다.**
+    4. 첨부파일이 있다면 해당 파일의 내용(이미지, 텍스트 등)을 적극적으로 반영하여 주제를 선정해주세요.
     
     JSON 형식으로 출력해주세요.
   `;
@@ -97,13 +98,21 @@ export const generateTopics = async (
 /**
  * Generates a book outline (chapters).
  */
-export const generateOutline = async (title: string, audience: string): Promise<string[]> => {
+export const generateOutline = async (title: string, audience: string, pageCount: string = 'AI추천'): Promise<string[]> => {
+  let pageInstruction = '';
+  if (pageCount === 'AI추천') {
+    pageInstruction = '주제에 가장 적합한 분량으로 체계적이고 논리적인 목차를 구성해주세요.';
+  } else {
+    pageInstruction = `전체 분량이 약 ${pageCount}페이지 내외가 될 수 있도록 목차를 상세하게 구성해주세요.`;
+  }
+
   const prompt = `
     전자책 제목: "${title}"
     예상 독자: "${audience}"
     
-    이 전자책을 위한 체계적이고 논리적인 목차(챕터 제목) 15~20개를 생성해주세요. 
-    [중요] 전체 분량이 A4 50페이지 이상이 되어야 하므로, 주제를 아주 세분화하여 많은 챕터를 구성해야 합니다.
+    이 전자책을 위한 체계적이고 논리적인 목차(챕터 제목)를 생성해주세요. 
+    [분량 가이드] ${pageInstruction}
+    보통 한 챕터당 A4 2~3페이지 분량으로 작성될 예정입니다. 이를 고려하여 적절한 개수의 챕터를 생성하세요.
     JSON 배열 형식으로 문자열만 반환하세요. 서론이나 결론은 제외하고 본문 챕터 위주로 구성하세요.
   `;
 

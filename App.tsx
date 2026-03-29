@@ -18,7 +18,8 @@ import {
   Paperclip,
   X,
   User,
-  Key
+  Key,
+  Lightbulb
 } from 'lucide-react';
 
 interface AttachedFile {
@@ -28,12 +29,16 @@ interface AttachedFile {
 }
 
 const App: React.FC = () => {
-  const [currentStep, setCurrentStep] = useState<AppStep>(AppStep.DASHBOARD);
+  const [currentStep, setCurrentStep] = useState<AppStep>(AppStep.TOPIC_SELECTION);
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
   const [hasApiKey, setHasApiKey] = useState(false);
   const [customApiKey, setCustomApiKey] = useState('');
   const [apiKeyInput, setApiKeyInput] = useState('');
+  const [showHowToUse, setShowHowToUse] = useState(false);
+  const [showMaintenance, setShowMaintenance] = useState(false);
+  const [automationProgress, setAutomationProgress] = useState(0);
+  const [isAutomating, setIsAutomating] = useState(false);
 
   const checkKey = async () => {
     const storedKey = localStorage.getItem('custom_gemini_api_key');
@@ -87,6 +92,7 @@ const App: React.FC = () => {
     targetAudience: '일반 대중',
     title: '',
     author: '',
+    pageCount: 'AI추천',
     outline: [],
     chapters: [],
   });
@@ -161,6 +167,7 @@ const App: React.FC = () => {
     if (!topicKeyword && attachedFiles.length === 0) return;
     setLoading(true);
     setLoadingMessage('Gemini 3 Pro가 입력된 키워드와 자료를 분석하여 브레인스토밍 중입니다...');
+    setSelectedTopicIdx(null);
     try {
       const topics = await geminiService.generateTopics(topicKeyword, attachedFiles);
       setTopicIdeas(topics);
@@ -173,7 +180,7 @@ const App: React.FC = () => {
   };
 
   // --- FULL AUTOMATION WORKFLOW ---
-  const runFullAutomation = async (selectedTopic: GeneratedTopic) => {
+  const runFullAutomation = async (selectedTopic?: GeneratedTopic) => {
     // Check for API Key
     if (!hasApiKey) {
       if ((window as any).aistudio) {
@@ -186,110 +193,131 @@ const App: React.FC = () => {
     }
 
     // 1. Initialize Local State for Consistency
-    // We use a local variable to track state across async calls because React state updates are asynchronous/batched.
-    let localEbookState: EBookState = {
-        ...ebook, // Preserve current inputs like author/audience
-        title: selectedTopic.title,
-        topic: selectedTopic.description,
-        outline: [],
-        chapters: []
-    };
+    let localEbookState: EBookState = { ...ebook };
+    
+    if (selectedTopic) {
+        localEbookState = {
+            ...localEbookState,
+            title: selectedTopic.title,
+            topic: selectedTopic.description,
+            outline: [],
+            chapters: []
+        };
+        setEbook(localEbookState);
+    }
 
-    // Update UI State
-    setEbook(localEbookState);
+    setIsAutomating(true);
+    setAutomationProgress(0);
+    setSelectedTopicIdx(null);
     setLoading(true);
 
     try {
         // --- PHASE 1: PLANNING ---
-        setCurrentStep(AppStep.PLANNING);
-        setLoadingMessage('Gemini가 50페이지 이상의 방대한 분량을 위해 체계적인 목차를 기획하고 있습니다...');
-        
-        const outline = await geminiService.generateOutline(localEbookState.title, localEbookState.targetAudience);
-        localEbookState = {
-            ...localEbookState,
-            outline,
-            chapters: outline.map((title, idx) => ({ id: idx, title, content: '' }))
-        };
-        setEbook(localEbookState);
-        
-        // UX Delay
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        if (currentStep <= AppStep.TOPIC_SELECTION || (selectedTopic && currentStep === AppStep.TOPIC_SELECTION)) {
+            setCurrentStep(AppStep.PLANNING);
+            setLoadingMessage('Gemini가 체계적인 목차를 기획하고 있습니다...');
+            setAutomationProgress(10);
+            
+            const outline = await geminiService.generateOutline(localEbookState.title, localEbookState.targetAudience, localEbookState.pageCount);
+            localEbookState = {
+                ...localEbookState,
+                outline,
+                chapters: outline.map((title, idx) => ({ id: idx, title, content: '' }))
+            };
+            setEbook(localEbookState);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
 
         // --- PHASE 2: WRITING ---
-        setCurrentStep(AppStep.WRITING);
-        setLoadingMessage('대규모 본문 집필을 시작합니다. 각 챕터별로 상세한 내용을 작성합니다...');
-        
-        const writtenChapters = [...localEbookState.chapters];
-        for (let i = 0; i < writtenChapters.length; i++) {
-            setLoadingMessage(`'${writtenChapters[i].title}' 챕터 작성 중... (${i + 1}/${writtenChapters.length})`);
+        if (currentStep <= AppStep.PLANNING) {
+            setCurrentStep(AppStep.WRITING);
+            setLoadingMessage('본문 집필을 시작합니다...');
+            setAutomationProgress(25);
             
-            const content = await geminiService.generateChapterContent(
-                localEbookState.title,
-                writtenChapters[i].title,
-                localEbookState.outline,
-                localEbookState.author
-            );
-            writtenChapters[i].content = content;
-            
-            // Update both local and UI state
-            localEbookState = { ...localEbookState, chapters: [...writtenChapters] };
-            setEbook(prev => ({ ...prev, chapters: [...writtenChapters] }));
-            setWritingProgress(((i + 1) / writtenChapters.length) * 100);
+            const writtenChapters = [...localEbookState.chapters];
+            for (let i = 0; i < writtenChapters.length; i++) {
+                const stepProgress = 25 + ((i / writtenChapters.length) * 40);
+                setAutomationProgress(Math.round(stepProgress));
+                setLoadingMessage(`'${writtenChapters[i].title}' 챕터 작성 중... (${i + 1}/${writtenChapters.length})`);
+                
+                const content = await geminiService.generateChapterContent(
+                    localEbookState.title,
+                    writtenChapters[i].title,
+                    localEbookState.outline,
+                    localEbookState.author
+                );
+                writtenChapters[i].content = content;
+                localEbookState = { ...localEbookState, chapters: [...writtenChapters] };
+                setEbook(prev => ({ ...prev, chapters: [...writtenChapters] }));
+                setWritingProgress(((i + 1) / writtenChapters.length) * 100);
+            }
+            setAutomationProgress(65);
+            await new Promise(resolve => setTimeout(resolve, 1000));
         }
-
-        await new Promise(resolve => setTimeout(resolve, 1000));
 
         // --- PHASE 3: COVER DESIGN ---
-        setCurrentStep(AppStep.COVER_DESIGN);
-        setLoadingMessage('표지 디자인 프롬프트 생성 및 렌더링 중...');
-        
-        const coverPrompt = await geminiService.generateImagePrompt(`Title: ${localEbookState.title}, Topic: ${localEbookState.topic}`, 'cover');
-        setEbook(prev => ({ ...prev, coverPrompt }));
-        
-        const coverImage = await geminiService.generateImage(coverPrompt, '3:4');
-        localEbookState = { ...localEbookState, coverPrompt, coverImage };
-        setEbook(localEbookState);
-
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        // --- PHASE 4: ILLUSTRATIONS ---
-        setCurrentStep(AppStep.ILLUSTRATION);
-        setLoadingMessage('각 챕터에 맞는 삽화를 생성 중입니다...');
-        
-        const chaptersWithImages = [...localEbookState.chapters];
-        for (let i = 0; i < chaptersWithImages.length; i++) {
-            setLoadingMessage(`챕터 ${i+1} 삽화 그리는 중... (${i+1}/${chaptersWithImages.length})`);
+        if (currentStep <= AppStep.WRITING) {
+            setCurrentStep(AppStep.COVER_DESIGN);
+            setLoadingMessage('표지 디자인 생성 중...');
+            setAutomationProgress(70);
             
-            const illPrompt = await geminiService.generateImagePrompt(
-                `Chapter Title: ${chaptersWithImages[i].title}. Content summary: ${chaptersWithImages[i].content.slice(0, 200)}...`, 
-                'illustration'
-            );
-            chaptersWithImages[i].imagePrompt = illPrompt;
-            
-            const imgData = await geminiService.generateImage(illPrompt, '4:3');
-            chaptersWithImages[i].imageData = imgData;
-             
-            localEbookState = { ...localEbookState, chapters: [...chaptersWithImages] };
-            setEbook(prev => ({ ...prev, chapters: [...chaptersWithImages] }));
-            setIllustrationProgress(((i + 1) / chaptersWithImages.length) * 100);
+            const coverPrompt = await geminiService.generateImagePrompt(`Title: ${localEbookState.title}, Topic: ${localEbookState.topic}`, 'cover');
+            const coverImage = await geminiService.generateImage(coverPrompt, '3:4');
+            localEbookState = { ...localEbookState, coverPrompt, coverImage };
+            setEbook(localEbookState);
+            setAutomationProgress(80);
+            await new Promise(resolve => setTimeout(resolve, 1000));
         }
 
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // --- PHASE 4: ILLUSTRATIONS ---
+        if (currentStep <= AppStep.COVER_DESIGN) {
+            setCurrentStep(AppStep.ILLUSTRATION);
+            setLoadingMessage('삽화 생성 중...');
+            
+            const chaptersWithImages = [...localEbookState.chapters];
+            for (let i = 0; i < chaptersWithImages.length; i++) {
+                const stepProgress = 80 + ((i / chaptersWithImages.length) * 15);
+                setAutomationProgress(Math.round(stepProgress));
+                setLoadingMessage(`챕터 ${i+1} 삽화 그리는 중... (${i+1}/${chaptersWithImages.length})`);
+                
+                const illPrompt = await geminiService.generateImagePrompt(
+                    `Chapter Title: ${chaptersWithImages[i].title}. Content summary: ${chaptersWithImages[i].content.slice(0, 200)}...`, 
+                    'illustration'
+                );
+                const imgData = await geminiService.generateImage(illPrompt, '4:3');
+                chaptersWithImages[i].imagePrompt = illPrompt;
+                chaptersWithImages[i].imageData = imgData;
+                
+                localEbookState = { ...localEbookState, chapters: [...chaptersWithImages] };
+                setEbook(prev => ({ ...prev, chapters: [...chaptersWithImages] }));
+                setIllustrationProgress(((i + 1) / chaptersWithImages.length) * 100);
+            }
+            setAutomationProgress(95);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
 
         // --- PHASE 5: FINISH ---
+        setAutomationProgress(100);
         setCurrentStep(AppStep.REVIEW_DOWNLOAD);
 
     } catch (error) {
         console.error(error);
-        alert("자동 생성 과정 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+        alert("자동 생성 과정 중 오류가 발생했습니다.");
     } finally {
         setLoading(false);
+        setIsAutomating(false);
     }
   };
 
-  const selectTopic = (topic: GeneratedTopic) => {
-    // Starts the full automation chain
-    runFullAutomation(topic);
+  const selectTopic = (topic: GeneratedTopic, idx: number) => {
+    setEbook(prev => ({
+      ...prev,
+      title: topic.title,
+      topic: topic.description,
+      outline: [],
+      chapters: []
+    }));
+    setSelectedTopicIdx(idx);
   };
 
   // --- Manual Handlers (Kept for manual retry capability) ---
@@ -306,7 +334,7 @@ const App: React.FC = () => {
     setLoading(true);
     setLoadingMessage('Gemini가 책의 구조를 논리적으로 기획하고 있습니다 (Thinking)...');
     try {
-      const outline = await geminiService.generateOutline(titleToUse, audienceToUse);
+      const outline = await geminiService.generateOutline(titleToUse, audienceToUse, ebook.pageCount);
       setEbook(prev => ({ 
         ...prev, 
         outline,
@@ -366,6 +394,7 @@ const App: React.FC = () => {
   };
 
   const [illustrationProgress, setIllustrationProgress] = useState(0);
+  const [selectedTopicIdx, setSelectedTopicIdx] = useState<number | null>(null);
   const handleGenerateIllustrations = async () => {
     setLoading(true);
     setLoadingMessage('각 챕터에 맞는 삽화를 생성 중입니다...');
@@ -403,9 +432,10 @@ const App: React.FC = () => {
 
   // --- Render Helpers ---
 
-  const renderDashboard = () => (
-    <div className="flex flex-col items-center h-full animate-fade-in pb-20">
-      {/* 16:9 Hero Banner */}
+
+  const renderTopicSelection = () => (
+    <div className="space-y-8 animate-fade-in pb-20">
+      {/* 16:9 Hero Banner at the top of Topic Selection */}
       <div className="w-full aspect-video relative rounded-3xl overflow-hidden shadow-2xl mb-12 flex items-center justify-center group">
         <img 
           src="https://images.unsplash.com/photo-1532012197267-da84d127e765?q=80&w=2000&auto=format&fit=crop" 
@@ -424,61 +454,51 @@ const App: React.FC = () => {
             혁신 전자책 AI
           </h1>
           <p className="text-xl md:text-2xl text-indigo-100 font-medium max-w-3xl mx-auto drop-shadow-lg leading-relaxed">
-            Gemini 3.1 Pro의 강력한 추론 능력과 이미지 생성 기능을 결합하여<br className="hidden md:block" />
+            혁신 전자책 AI의 강력한 추론 능력과 이미지 생성 기능을 결합하여<br className="hidden md:block" />
             단 몇 번의 클릭으로 전문가 수준의 전자책을 기획하고 출판하세요.
           </p>
         </div>
       </div>
 
-      <div className="flex flex-col items-center w-full max-w-2xl mx-auto space-y-8">
-        {!hasApiKey && (
-          <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl w-full">
-            <p className="text-amber-800 text-sm mb-3 text-center">
-              AI Studio 환경인 경우 아래 버튼으로 API 키를 선택할 수 있습니다.
-            </p>
-            <button 
-              onClick={handleOpenKeySelection}
-              className="flex items-center justify-center gap-2 w-full py-2 bg-amber-600 text-white rounded-lg font-bold hover:bg-amber-700 transition-colors"
-            >
-              <Key size={18} />
-              AI Studio API 키 선택하기
-            </button>
-          </div>
-        )}
-
-        <button 
-          onClick={() => setCurrentStep(AppStep.TOPIC_SELECTION)}
-          className="group relative inline-flex items-center justify-center px-8 py-4 text-lg font-bold text-white transition-all duration-200 bg-indigo-600 font-pj rounded-xl focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-600 hover:bg-indigo-700 shadow-lg w-full sm:w-auto"
-        >
-          새로운 프로젝트 시작하기
-          <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
-        </button>
-      </div>
-    </div>
-  );
-
-  const renderTopicSelection = () => (
-    <div className="space-y-8 animate-fade-in">
       <div className="text-center space-y-2">
         <h2 className="text-3xl font-bold text-slate-800">어떤 주제로 글을 쓰시겠습니까?</h2>
         <p className="text-slate-500">핵심 키워드를 입력하거나 참고 자료를 첨부하면 AI가 흥미로운 주제를 제안합니다.</p>
       </div>
 
-      <div className="max-w-2xl mx-auto space-y-4">
+      <div className="max-w-2xl mx-auto space-y-6">
         {/* Author Name Input */}
-        <div className="relative">
-          <label className="block text-sm font-medium text-slate-700 mb-1 ml-1">저자명</label>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="relative">
-             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <User className="h-5 w-5 text-slate-400" />
-             </div>
-             <input 
-              type="text" 
-              value={ebook.author}
-              onChange={(e) => setEbook(prev => ({...prev, author: e.target.value}))}
-              placeholder="저자명을 입력하세요 (예: 홍길동)" 
-              className="w-full pl-10 pr-6 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-lg shadow-sm"
-            />
+            <label className="block text-sm font-medium text-slate-700 mb-1 ml-1">저자명</label>
+            <div className="relative">
+               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <User className="h-5 w-5 text-slate-400" />
+               </div>
+               <input 
+                type="text" 
+                value={ebook.author}
+                onChange={(e) => setEbook(prev => ({...prev, author: e.target.value}))}
+                placeholder="저자명을 입력하세요" 
+                className="w-full pl-10 pr-6 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-lg shadow-sm"
+              />
+            </div>
+          </div>
+
+          <div className="relative">
+            <label className="block text-sm font-medium text-slate-700 mb-1 ml-1">전자책 분량 선택</label>
+            <select 
+              value={ebook.pageCount}
+              onChange={(e) => setEbook(prev => ({...prev, pageCount: e.target.value}))}
+              className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-lg shadow-sm bg-white"
+            >
+              <option value="AI추천">AI 추천 (자동 최적화)</option>
+              <option value="20">20페이지 내외</option>
+              <option value="30">30페이지 내외</option>
+              <option value="50">50페이지 내외</option>
+              <option value="100">100페이지 내외</option>
+              <option value="150">150페이지 내외</option>
+              <option value="200">200페이지 내외</option>
+            </select>
           </div>
         </div>
 
@@ -546,18 +566,40 @@ const App: React.FC = () => {
       </div>
 
       {topicIdeas.length > 0 && (
-        <div className="grid md:grid-cols-3 gap-6 mt-12">
-          {topicIdeas.map((idea, idx) => (
-            <div key={idx} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl hover:border-indigo-500 transition-all cursor-pointer group flex flex-col"
-              onClick={() => selectTopic(idea)}
-            >
-              <h3 className="text-xl font-bold text-slate-800 mb-3 group-hover:text-indigo-600">{idea.title}</h3>
-              <p className="text-slate-600 flex-1">{idea.description}</p>
-              <div className="mt-6 flex items-center text-indigo-600 font-semibold text-sm">
-                이 주제 선택하기 <ArrowRight className="ml-1 w-4 h-4" />
+        <div className="space-y-6 mt-12">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+              <Sparkles className="text-amber-500 w-5 h-5" />
+              AI 추천 주제 (추천순)
+            </h3>
+            {selectedTopicIdx !== null && (
+              <div className="animate-bounce-subtle flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-full text-sm font-bold border border-indigo-100 shadow-sm">
+                <ArrowRight className="rotate-90 w-4 h-4" />
+                하단의 '원클릭 자동화' 또는 '다음단계 진행' 버튼을 눌러주세요!
               </div>
-            </div>
-          ))}
+            )}
+          </div>
+          <div className="grid md:grid-cols-3 gap-6">
+            {topicIdeas.map((idea, idx) => (
+              <div key={idx} className={`relative bg-white p-6 rounded-2xl border transition-all cursor-pointer group flex flex-col h-full
+                ${selectedTopicIdx === idx 
+                  ? 'border-indigo-500 shadow-xl ring-2 ring-indigo-500/20 bg-indigo-50/30' 
+                  : 'border-slate-200 shadow-sm hover:shadow-lg hover:border-indigo-300'
+                }`}
+                onClick={() => selectTopic(idea, idx)}
+              >
+                <div className="absolute -top-3 -left-3 w-8 h-8 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold shadow-lg z-10">
+                  {idx + 1}
+                </div>
+                <h3 className="text-xl font-bold text-slate-800 mb-3 group-hover:text-indigo-600 mt-2">{idea.title}</h3>
+                <p className="text-slate-600 flex-1 text-sm leading-relaxed">{idea.description}</p>
+                <div className={`mt-6 flex items-center font-semibold text-sm transition-colors ${selectedTopicIdx === idx ? 'text-indigo-600' : 'text-slate-400 group-hover:text-indigo-500'}`}>
+                  {selectedTopicIdx === idx ? '선택됨' : '이 주제 선택하기'} 
+                  <ArrowRight className={`ml-1 w-4 h-4 transition-transform ${selectedTopicIdx === idx ? 'translate-x-1' : ''}`} />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -837,46 +879,142 @@ const App: React.FC = () => {
     </div>
   );
 
-  const getStepContent = () => {
-    switch (currentStep) {
-      case AppStep.DASHBOARD: return renderDashboard();
-      case AppStep.TOPIC_SELECTION: return renderTopicSelection();
-      case AppStep.PLANNING: return renderPlanning();
-      case AppStep.WRITING: return renderWriting();
-      case AppStep.COVER_DESIGN: return renderCoverDesign();
-      case AppStep.ILLUSTRATION: return renderIllustration();
-      case AppStep.REVIEW_DOWNLOAD: return renderReview();
-      default: return renderDashboard();
-    }
+
+  const renderNavigationFooter = () => {
+    const canGoPrev = currentStep > AppStep.TOPIC_SELECTION;
+    const canGoNext = currentStep < AppStep.REVIEW_DOWNLOAD;
+    
+    const handlePrev = () => {
+      setCurrentStep(prev => Math.max(prev - 1, AppStep.TOPIC_SELECTION));
+    };
+
+    const handleNext = () => {
+      setCurrentStep(prev => Math.min(prev + 1, AppStep.REVIEW_DOWNLOAD));
+    };
+
+    const handleProceed = () => {
+      switch(currentStep) {
+        case AppStep.TOPIC_SELECTION:
+          if (ebook.title) setCurrentStep(AppStep.PLANNING);
+          else alert('주제를 먼저 선택해주세요.');
+          break;
+        case AppStep.PLANNING:
+          if (ebook.outline.length > 0) setCurrentStep(AppStep.WRITING);
+          else handleGenerateOutline();
+          break;
+        case AppStep.WRITING:
+          if (ebook.chapters.every(c => c.content)) setCurrentStep(AppStep.COVER_DESIGN);
+          else handleWriteAllChapters();
+          break;
+        case AppStep.COVER_DESIGN:
+          if (ebook.coverImage) setCurrentStep(AppStep.ILLUSTRATION);
+          else handleGenerateCover();
+          break;
+        case AppStep.ILLUSTRATION:
+          if (ebook.chapters.every(c => c.imageData)) setCurrentStep(AppStep.REVIEW_DOWNLOAD);
+          else handleGenerateIllustrations();
+          break;
+        default:
+          break;
+      }
+    };
+
+    return (
+      <div className="fixed bottom-0 left-64 right-0 bg-white border-t border-slate-200 p-4 flex items-center justify-between z-40 shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
+        <div className="flex gap-3">
+          <button 
+            onClick={handlePrev}
+            disabled={!canGoPrev || loading}
+            className="px-6 py-2 border border-slate-300 rounded-xl font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-all flex items-center gap-2"
+          >
+            <ArrowRight className="rotate-180 w-4 h-4" />
+            이전
+          </button>
+          <button 
+            onClick={handleNext}
+            disabled={!canGoNext || loading}
+            className="px-6 py-2 border border-slate-300 rounded-xl font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-all flex items-center gap-2"
+          >
+            다음
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="flex gap-3 items-center">
+          {isAutomating && (
+            <div className="flex flex-col items-end mr-4">
+              <span className="text-xs font-bold text-indigo-600 mb-1">자동화 진행률: {automationProgress}%</span>
+              <div className="w-48 bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-200">
+                <div 
+                  className="bg-indigo-600 h-full transition-all duration-500" 
+                  style={{ width: `${automationProgress}%` }}
+                ></div>
+              </div>
+            </div>
+          )}
+          
+          <button 
+            onClick={() => runFullAutomation()}
+            disabled={loading || (currentStep === AppStep.TOPIC_SELECTION && !ebook.title)}
+            className="px-6 py-2 bg-indigo-100 text-indigo-700 rounded-xl font-bold hover:bg-indigo-200 disabled:opacity-50 transition-all flex items-center gap-2"
+          >
+            <Sparkles size={18} />
+            원클릭 자동화
+          </button>
+
+          {currentStep < AppStep.REVIEW_DOWNLOAD && (
+            <button 
+              onClick={handleProceed}
+              disabled={loading}
+              className="px-8 py-2 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 disabled:opacity-50 transition-all flex items-center gap-2 shadow-lg shadow-indigo-200"
+            >
+              {loading ? <Loader2 className="animate-spin w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
+              다음단계 진행
+            </button>
+          )}
+        </div>
+      </div>
+    );
   };
 
   const renderHeaderRight = () => (
-    <div className="flex items-center gap-3">
-      {/* Status Indicator */}
-      <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border ${
-        hasApiKey 
-          ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-          : 'bg-rose-50 text-rose-700 border-rose-200'
-      }`}>
-        <div className={`w-2 h-2 rounded-full ${hasApiKey ? 'bg-emerald-500' : 'bg-rose-500 animate-pulse'}`}></div>
-        {hasApiKey ? 'API 키 적용됨' : 'API 키 미적용'}
-      </div>
+    <div className="flex items-center gap-4">
+      {/* How to Use Button */}
+      <button 
+        onClick={() => setShowHowToUse(true)}
+        className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold transition-colors text-sm"
+      >
+        <BookOpen size={16} />
+        사용 방법
+      </button>
 
-      <div className="flex items-center bg-slate-100 rounded-lg p-1 border border-slate-200">
-        <Key size={16} className="text-slate-500 ml-2" />
-        <input 
-          type="password" 
-          value={apiKeyInput}
-          onChange={(e) => setApiKeyInput(e.target.value)}
-          placeholder="Gemini API Key"
-          className="w-48 px-3 py-1.5 bg-transparent text-sm focus:outline-none text-slate-700"
-        />
-        <button 
-          onClick={handleSaveApiKey}
-          className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-md hover:bg-indigo-700 transition-colors"
-        >
-          저장
-        </button>
+      <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
+        {hasApiKey ? (
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-green-100 text-green-700 rounded-lg text-sm font-bold border border-green-200">
+            <CheckCircle2 size={16} />
+            API 키 적용됨
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-sm font-bold border border-red-200 animate-pulse ring-4 ring-red-500/20">
+            <X size={16} />
+            API 키 미적용
+          </div>
+        )}
+        <div className="flex items-center gap-2">
+          <input 
+            type="password" 
+            value={apiKeyInput}
+            onChange={(e) => setApiKeyInput(e.target.value)}
+            placeholder="Gemini API 키 입력"
+            className="px-3 py-1.5 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-48"
+          />
+          <button 
+            onClick={handleSaveApiKey}
+            className="px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 transition-colors"
+          >
+            적용
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -885,10 +1023,131 @@ const App: React.FC = () => {
     <Layout 
       currentStep={currentStep} 
       setCurrentStep={setCurrentStep}
-      onSettingsOpen={handleOpenKeySelection}
+      onSettingsOpen={() => {}}
       headerRight={renderHeaderRight()}
     >
-      {getStepContent()}
+      {currentStep === AppStep.TOPIC_SELECTION && renderTopicSelection()}
+      {currentStep === AppStep.PLANNING && renderPlanning()}
+      {currentStep === AppStep.WRITING && renderWriting()}
+      {currentStep === AppStep.COVER_DESIGN && renderCoverDesign()}
+      {currentStep === AppStep.ILLUSTRATION && renderIllustration()}
+      {currentStep === AppStep.REVIEW_DOWNLOAD && renderReview()}
+
+      {renderNavigationFooter()}
+
+      {/* How to Use Modal */}
+      {showHowToUse && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col animate-scale-in">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-indigo-50">
+              <h3 className="text-2xl font-bold text-indigo-900 flex items-center gap-2">
+                <Lightbulb className="text-indigo-600" />
+                혁신 전자책 AI 사용 방법
+              </h3>
+              <button 
+                onClick={() => setShowHowToUse(false)}
+                className="p-2 hover:bg-white/50 rounded-full transition-colors"
+              >
+                <X size={24} className="text-indigo-900" />
+              </button>
+            </div>
+            <div className="p-8 overflow-y-auto space-y-6 text-slate-700 leading-relaxed">
+              <section>
+                <h4 className="text-lg font-bold text-slate-900 mb-2 flex items-center gap-2">
+                  <span className="w-6 h-6 bg-indigo-600 text-white rounded-full flex items-center justify-center text-xs">1</span>
+                  API 키 설정
+                </h4>
+                <p>우측 상단 입력창에 Gemini API 키를 입력하고 '적용' 버튼을 누르세요. 한 번 적용하면 동일한 브라우저에서는 계속 유지됩니다.</p>
+              </section>
+              <section>
+                <h4 className="text-lg font-bold text-slate-900 mb-2 flex items-center gap-2">
+                  <span className="w-6 h-6 bg-indigo-600 text-white rounded-full flex items-center justify-center text-xs">2</span>
+                  주제 선정 및 저자 입력
+                </h4>
+                <p>저자명을 입력하고, 원하는 책의 키워드를 입력하세요. 참고할 파일(PDF, 이미지 등)이 있다면 최대 5개까지 첨부할 수 있습니다. '아이디어 생성' 버튼을 누르면 AI가 3가지 주제를 제안합니다.</p>
+              </section>
+              <section>
+                <h4 className="text-lg font-bold text-slate-900 mb-2 flex items-center gap-2">
+                  <span className="w-6 h-6 bg-indigo-600 text-white rounded-full flex items-center justify-center text-xs">3</span>
+                  분량 선택
+                </h4>
+                <p>원하는 전자책의 대략적인 페이지 수를 선택하세요. 'AI 추천'을 선택하면 주제에 가장 적합한 분량으로 자동 설정됩니다.</p>
+              </section>
+              <section>
+                <h4 className="text-lg font-bold text-slate-900 mb-2 flex items-center gap-2">
+                  <span className="w-6 h-6 bg-indigo-600 text-white rounded-full flex items-center justify-center text-xs">4</span>
+                  자동 생성 프로세스
+                </h4>
+                <p>제안된 주제 중 하나를 선택하면 [기획 &rarr; 목차 생성 &rarr; 본문 집필 &rarr; 표지 디자인 &rarr; 삽화 생성] 단계가 자동으로 진행됩니다. 각 단계별로 진행 상황을 확인할 수 있습니다.</p>
+              </section>
+              <section>
+                <h4 className="text-lg font-bold text-slate-900 mb-2 flex items-center gap-2">
+                  <span className="w-6 h-6 bg-indigo-600 text-white rounded-full flex items-center justify-center text-xs">5</span>
+                  다운로드
+                </h4>
+                <p>모든 과정이 완료되면 'DOCX 다운로드' 버튼을 통해 워드 파일로 결과물을 저장할 수 있습니다.</p>
+              </section>
+            </div>
+            <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end">
+              <button 
+                onClick={() => setShowHowToUse(false)}
+                className="px-6 py-2 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors"
+              >
+                확인했습니다
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Error & Maintenance Modal */}
+      {showMaintenance && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full animate-scale-in overflow-hidden">
+            <div className="p-6 bg-red-50 border-b border-red-100 flex items-center justify-between">
+              <h3 className="text-xl font-bold text-red-900 flex items-center gap-2">
+                오류 및 유지보수 안내
+              </h3>
+              <button onClick={() => setShowMaintenance(false)} className="p-1 hover:bg-red-100 rounded-full">
+                <X size={20} className="text-red-900" />
+              </button>
+            </div>
+            <div className="p-8 text-slate-700">
+              <p className="mb-4 font-medium">혁신 전자책 AI 오류 및 유지보수 요청사항이 있을 경우, 아래 메일로 명확한 상황을 작성해서 보내주시면 실시간 확인 후 조치해 드립니다.</p>
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex items-center justify-center gap-2">
+                <span className="font-bold text-indigo-600">info@nextin.ai.kr</span>
+              </div>
+            </div>
+            <div className="p-6 bg-slate-50 flex justify-end">
+              <button 
+                onClick={() => setShowMaintenance(false)}
+                className="px-6 py-2 bg-slate-800 text-white rounded-xl font-bold hover:bg-slate-900"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Buttons (Bottom Right) */}
+      <div className="fixed bottom-24 right-8 flex flex-col gap-3 z-50">
+        <button 
+          onClick={() => setShowMaintenance(true)}
+          className="flex items-center gap-2 px-6 py-3 bg-white text-slate-700 border border-slate-200 rounded-full shadow-xl hover:bg-slate-50 transition-all font-bold text-sm"
+        >
+          오류 및 유지보수
+        </button>
+        <a 
+          href="https://hyeoksinai.com" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-full shadow-xl hover:bg-indigo-700 transition-all font-bold text-sm"
+        >
+          혁신 AI 플랫폼 바로가기
+          <ArrowRight size={16} />
+        </a>
+      </div>
     </Layout>
   );
 };
