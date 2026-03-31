@@ -21,11 +21,12 @@ export interface EBookState {
 export enum AppStep {
   DASHBOARD = 0,
   TOPIC_SELECTION = 1,
-  PLANNING = 2,
-  WRITING = 3,
-  COVER_DESIGN = 4,
-  ILLUSTRATION = 5,
-  REVIEW_DOWNLOAD = 6,
+  AUDIENCE_SETTING = 2,
+  PLANNING = 3,
+  WRITING = 4,
+  COVER_DESIGN = 5,
+  ILLUSTRATION = 6,
+  REVIEW_DOWNLOAD = 7,
 }
 
 export interface GeneratedTopic {

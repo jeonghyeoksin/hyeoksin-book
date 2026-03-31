@@ -101,14 +101,8 @@ const App: React.FC = () => {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       // Explicitly cast to File[] to avoid 'unknown' type inference issues
-      const files: File[] = Array.from(e.target.files);
-      const remainingSlots = 5 - attachedFiles.length;
-      const filesToProcess = files.slice(0, remainingSlots);
+      const filesToProcess: File[] = Array.from(e.target.files);
       
-      if (files.length > remainingSlots) {
-        alert(`최대 5개까지만 첨부할 수 있습니다.`);
-      }
-
       const newAttachments: AttachedFile[] = [];
 
       for (const file of filesToProcess) {
@@ -192,31 +186,69 @@ const App: React.FC = () => {
       }
     }
 
-    // 1. Initialize Local State for Consistency
-    let localEbookState: EBookState = { ...ebook };
-    
-    if (selectedTopic) {
-        localEbookState = {
-            ...localEbookState,
-            title: selectedTopic.title,
-            topic: selectedTopic.description,
-            outline: [],
-            chapters: []
-        };
-        setEbook(localEbookState);
-    }
-
     setIsAutomating(true);
     setAutomationProgress(0);
     setSelectedTopicIdx(null);
     setLoading(true);
 
     try {
-        // --- PHASE 1: PLANNING ---
-        if (currentStep <= AppStep.TOPIC_SELECTION || (selectedTopic && currentStep === AppStep.TOPIC_SELECTION)) {
+        let localEbookState: EBookState = { ...ebook };
+
+        // --- PHASE 0: TOPIC GENERATION (If starting from scratch) ---
+        if (currentStep === AppStep.TOPIC_SELECTION && !selectedTopic && !ebook.title) {
+            if (!topicKeyword && attachedFiles.length === 0) {
+                alert("키워드를 입력하거나 파일을 첨부해주세요.");
+                setLoading(false);
+                setIsAutomating(false);
+                return;
+            }
+            setLoadingMessage('Gemini가 최적의 주제를 브레인스토밍 중입니다...');
+            setAutomationProgress(5);
+            const topics = await geminiService.generateTopics(topicKeyword, attachedFiles);
+            if (topics.length === 0) throw new Error("주제 생성 실패");
+            
+            setTopicIdeas(topics);
+            const bestTopic = topics[0];
+            setSelectedTopicIdx(0);
+            
+            localEbookState = {
+                ...localEbookState,
+                title: bestTopic.title,
+                topic: bestTopic.description,
+                outline: [],
+                chapters: []
+            };
+            setEbook(localEbookState);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        } else if (selectedTopic) {
+            localEbookState = {
+                ...localEbookState,
+                title: selectedTopic.title,
+                topic: selectedTopic.description,
+                outline: [],
+                chapters: []
+            };
+            setEbook(localEbookState);
+        }
+
+        // --- PHASE 1: AUDIENCE SETTING ---
+        if (currentStep <= AppStep.TOPIC_SELECTION) {
+            setCurrentStep(AppStep.AUDIENCE_SETTING);
+            setLoadingMessage('AI가 주제에 최적화된 독자층을 분석하고 있습니다...');
+            setAutomationProgress(10);
+            
+            const suggestedAudience = await geminiService.suggestTargetAudience(localEbookState.title, localEbookState.topic);
+            localEbookState = { ...localEbookState, targetAudience: suggestedAudience };
+            setEbook(localEbookState);
+            setAutomationProgress(15);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+
+        // --- PHASE 2: PLANNING ---
+        if (currentStep <= AppStep.AUDIENCE_SETTING) {
             setCurrentStep(AppStep.PLANNING);
             setLoadingMessage('Gemini가 체계적인 목차를 기획하고 있습니다...');
-            setAutomationProgress(10);
+            setAutomationProgress(20);
             
             const outline = await geminiService.generateOutline(localEbookState.title, localEbookState.targetAudience, localEbookState.pageCount);
             localEbookState = {
@@ -225,18 +257,19 @@ const App: React.FC = () => {
                 chapters: outline.map((title, idx) => ({ id: idx, title, content: '' }))
             };
             setEbook(localEbookState);
+            setAutomationProgress(30);
             await new Promise(resolve => setTimeout(resolve, 1000));
         }
 
-        // --- PHASE 2: WRITING ---
+        // --- PHASE 3: WRITING ---
         if (currentStep <= AppStep.PLANNING) {
             setCurrentStep(AppStep.WRITING);
             setLoadingMessage('본문 집필을 시작합니다...');
-            setAutomationProgress(25);
+            setAutomationProgress(35);
             
             const writtenChapters = [...localEbookState.chapters];
             for (let i = 0; i < writtenChapters.length; i++) {
-                const stepProgress = 25 + ((i / writtenChapters.length) * 40);
+                const stepProgress = 35 + ((i / writtenChapters.length) * 40);
                 setAutomationProgress(Math.round(stepProgress));
                 setLoadingMessage(`'${writtenChapters[i].title}' 챕터 작성 중... (${i + 1}/${writtenChapters.length})`);
                 
@@ -251,38 +284,38 @@ const App: React.FC = () => {
                 setEbook(prev => ({ ...prev, chapters: [...writtenChapters] }));
                 setWritingProgress(((i + 1) / writtenChapters.length) * 100);
             }
-            setAutomationProgress(65);
+            setAutomationProgress(75);
             await new Promise(resolve => setTimeout(resolve, 1000));
         }
 
-        // --- PHASE 3: COVER DESIGN ---
+        // --- PHASE 4: COVER DESIGN ---
         if (currentStep <= AppStep.WRITING) {
             setCurrentStep(AppStep.COVER_DESIGN);
             setLoadingMessage('표지 디자인 프롬프트 생성 중...');
-            setAutomationProgress(70);
+            setAutomationProgress(80);
             
-            const coverPrompt = await geminiService.generateImagePrompt(`Title: ${localEbookState.title}, Topic: ${localEbookState.topic}`, 'cover');
+            const coverPrompt = await geminiService.generateImagePrompt(`Title: ${localEbookState.title}, Topic: ${localEbookState.topic}, Author: ${localEbookState.author}`, 'cover');
             if (!coverPrompt) throw new Error("표지 프롬프트 생성 실패");
             
             setLoadingMessage('표지 이미지를 렌더링 중입니다...');
-            setAutomationProgress(75);
+            setAutomationProgress(85);
             const coverImage = await geminiService.generateImage(coverPrompt, '3:4');
             if (!coverImage) throw new Error("표지 이미지 생성 실패");
             
             localEbookState = { ...localEbookState, coverPrompt, coverImage };
             setEbook(localEbookState);
-            setAutomationProgress(80);
+            setAutomationProgress(90);
             await new Promise(resolve => setTimeout(resolve, 1000));
         }
 
-        // --- PHASE 4: ILLUSTRATIONS ---
+        // --- PHASE 5: ILLUSTRATIONS ---
         if (currentStep <= AppStep.COVER_DESIGN) {
             setCurrentStep(AppStep.ILLUSTRATION);
             setLoadingMessage('각 챕터별 삽화 생성 준비 중...');
             
             const chaptersWithImages = [...localEbookState.chapters];
             for (let i = 0; i < chaptersWithImages.length; i++) {
-                const stepProgress = 80 + ((i / chaptersWithImages.length) * 15);
+                const stepProgress = 90 + ((i / chaptersWithImages.length) * 8);
                 setAutomationProgress(Math.round(stepProgress));
                 setLoadingMessage(`챕터 ${i+1} 삽화 그리는 중... (${i+1}/${chaptersWithImages.length})`);
                 
@@ -302,11 +335,11 @@ const App: React.FC = () => {
                 setIllustrationProgress(((i + 1) / chaptersWithImages.length) * 100);
                 await new Promise(resolve => setTimeout(resolve, 500));
             }
-            setAutomationProgress(95);
+            setAutomationProgress(98);
             await new Promise(resolve => setTimeout(resolve, 1000));
         }
 
-        // --- PHASE 5: FINISH ---
+        // --- PHASE 6: FINISH ---
         setAutomationProgress(100);
         setCurrentStep(AppStep.REVIEW_DOWNLOAD);
 
@@ -319,7 +352,7 @@ const App: React.FC = () => {
     }
   };
 
-  const selectTopic = (topic: GeneratedTopic, idx: number) => {
+  const selectTopic = async (topic: GeneratedTopic, idx: number) => {
     setEbook(prev => ({
       ...prev,
       title: topic.title,
@@ -328,6 +361,18 @@ const App: React.FC = () => {
       chapters: []
     }));
     setSelectedTopicIdx(idx);
+    
+    // Automatically suggest audience when a topic is selected
+    setLoading(true);
+    setLoadingMessage('AI가 최적의 독자층을 분석하고 있습니다...');
+    try {
+      const suggestedAudience = await geminiService.suggestTargetAudience(topic.title, topic.description);
+      setEbook(prev => ({ ...prev, targetAudience: suggestedAudience }));
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // --- Manual Handlers (Kept for manual retry capability) ---
@@ -535,26 +580,27 @@ const App: React.FC = () => {
         {/* File Upload Section */}
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-3">
-             <input
-              type="file"
-              id="file-upload"
-              multiple
-              className="hidden"
-              onChange={handleFileChange}
-              disabled={loading || attachedFiles.length >= 5}
-            />
-            <label 
-              htmlFor="file-upload"
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-slate-300 bg-white text-slate-600 transition-colors
-                ${attachedFiles.length >= 5 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-50 cursor-pointer hover:border-indigo-400 hover:text-indigo-600'}
-              `}
-            >
-              <Paperclip size={16} />
-              참고자료 첨부 (최대 5개)
-            </label>
-            <span className="text-xs text-slate-400">
-              {attachedFiles.length}/5 files
-            </span>
+              <input
+               type="file"
+               id="file-upload"
+               multiple
+               accept=".pdf,.docx,.doc,.txt,image/*"
+               className="hidden"
+               onChange={handleFileChange}
+               disabled={loading}
+             />
+             <label 
+               htmlFor="file-upload"
+               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-slate-300 bg-white text-slate-600 transition-colors
+                 ${loading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-50 cursor-pointer hover:border-indigo-400 hover:text-indigo-600'}
+               `}
+             >
+               <Paperclip size={16} />
+               참고자료 첨부 (제한 없음)
+             </label>
+             <span className="text-xs text-slate-400">
+               {attachedFiles.length} files attached
+             </span>
           </div>
 
           {/* Attached Files List */}
@@ -613,6 +659,49 @@ const App: React.FC = () => {
           </div>
         </div>
       )}
+    </div>
+  );
+
+  const renderAudienceSetting = () => (
+    <div className="space-y-8 animate-fade-in">
+      <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
+        <h2 className="text-2xl font-bold text-slate-800 mb-6 border-b pb-4">독자 설정</h2>
+        <div className="space-y-6">
+          <div className="p-6 bg-indigo-50 rounded-xl border border-indigo-100">
+            <h3 className="font-bold text-indigo-900 mb-2 flex items-center gap-2">
+              <Sparkles size={18} />
+              선택된 주제
+            </h3>
+            <p className="text-indigo-800 font-medium text-lg">"{ebook.title}"</p>
+            <p className="text-indigo-600 text-sm mt-1">{ebook.topic}</p>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2 ml-1">AI 추천 타겟 독자</label>
+            <div className="relative">
+              <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+              <input 
+                type="text" 
+                value={ebook.targetAudience} 
+                onChange={(e) => setEbook({...ebook, targetAudience: e.target.value})}
+                placeholder="예: 인공지능에 관심 있는 30대 직장인"
+                className="w-full pl-12 pr-6 py-4 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-lg shadow-sm"
+              />
+            </div>
+            <p className="text-xs text-slate-400 mt-2 ml-1">* AI가 분석한 최적의 독자층입니다. 필요시 수정할 수 있습니다.</p>
+          </div>
+        </div>
+        
+        <div className="mt-10 flex justify-end">
+          <button 
+            onClick={() => setCurrentStep(AppStep.PLANNING)}
+            className="px-8 py-4 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg flex items-center gap-2 transition-all active:scale-95"
+          >
+            기획 및 목차 생성 단계로 이동
+            <ArrowRight size={20} />
+          </button>
+        </div>
+      </div>
     </div>
   );
 
@@ -906,8 +995,12 @@ const App: React.FC = () => {
     const handleProceed = () => {
       switch(currentStep) {
         case AppStep.TOPIC_SELECTION:
-          if (ebook.title) setCurrentStep(AppStep.PLANNING);
+          if (ebook.title) setCurrentStep(AppStep.AUDIENCE_SETTING);
           else alert('주제를 먼저 선택해주세요.');
+          break;
+        case AppStep.AUDIENCE_SETTING:
+          if (ebook.targetAudience) setCurrentStep(AppStep.PLANNING);
+          else alert('독자 설정을 완료해주세요.');
           break;
         case AppStep.PLANNING:
           if (ebook.outline.length > 0) setCurrentStep(AppStep.WRITING);
@@ -966,7 +1059,7 @@ const App: React.FC = () => {
           
           <button 
             onClick={() => runFullAutomation()}
-            disabled={loading || (currentStep === AppStep.TOPIC_SELECTION && !ebook.title)}
+            disabled={loading || (currentStep === AppStep.TOPIC_SELECTION && !topicKeyword && attachedFiles.length === 0 && !ebook.title)}
             className="px-6 py-2 bg-indigo-100 text-indigo-700 rounded-xl font-bold hover:bg-indigo-200 disabled:opacity-50 transition-all flex items-center gap-2"
           >
             <Sparkles size={18} />
@@ -1038,6 +1131,7 @@ const App: React.FC = () => {
       headerRight={renderHeaderRight()}
     >
       {currentStep === AppStep.TOPIC_SELECTION && renderTopicSelection()}
+      {currentStep === AppStep.AUDIENCE_SETTING && renderAudienceSetting()}
       {currentStep === AppStep.PLANNING && renderPlanning()}
       {currentStep === AppStep.WRITING && renderWriting()}
       {currentStep === AppStep.COVER_DESIGN && renderCoverDesign()}
@@ -1075,25 +1169,32 @@ const App: React.FC = () => {
                   <span className="w-6 h-6 bg-indigo-600 text-white rounded-full flex items-center justify-center text-xs">2</span>
                   주제 선정 및 저자 입력
                 </h4>
-                <p>저자명을 입력하고, 원하는 책의 키워드를 입력하세요. 참고할 파일(PDF, 이미지 등)이 있다면 최대 5개까지 첨부할 수 있습니다. '아이디어 생성' 버튼을 누르면 AI가 3가지 주제를 제안합니다.</p>
+                <p>저자명을 입력하고, 원하는 책의 키워드를 입력하세요. 참고할 파일(PDF, DOCX, 이미지 등)은 개수 제한 없이 첨부할 수 있습니다. '아이디어 생성' 버튼을 누르면 AI가 3가지 주제를 제안합니다.</p>
               </section>
               <section>
                 <h4 className="text-lg font-bold text-slate-900 mb-2 flex items-center gap-2">
                   <span className="w-6 h-6 bg-indigo-600 text-white rounded-full flex items-center justify-center text-xs">3</span>
+                  독자 설정
+                </h4>
+                <p>선택된 주제에 가장 적합한 독자층을 AI가 분석하여 제안합니다. 필요에 따라 직접 수정할 수 있습니다.</p>
+              </section>
+              <section>
+                <h4 className="text-lg font-bold text-slate-900 mb-2 flex items-center gap-2">
+                  <span className="w-6 h-6 bg-indigo-600 text-white rounded-full flex items-center justify-center text-xs">4</span>
                   분량 선택
                 </h4>
                 <p>원하는 전자책의 대략적인 페이지 수를 선택하세요. 'AI 추천'을 선택하면 주제에 가장 적합한 분량으로 자동 설정됩니다.</p>
               </section>
               <section>
                 <h4 className="text-lg font-bold text-slate-900 mb-2 flex items-center gap-2">
-                  <span className="w-6 h-6 bg-indigo-600 text-white rounded-full flex items-center justify-center text-xs">4</span>
+                  <span className="w-6 h-6 bg-indigo-600 text-white rounded-full flex items-center justify-center text-xs">5</span>
                   자동 생성 프로세스
                 </h4>
-                <p>제안된 주제 중 하나를 선택하면 [기획 &rarr; 목차 생성 &rarr; 본문 집필 &rarr; 표지 디자인 &rarr; 삽화 생성] 단계가 자동으로 진행됩니다. 각 단계별로 진행 상황을 확인할 수 있습니다.</p>
+                <p>제안된 주제 중 하나를 선택하면 [독자 설정 &rarr; 기획 &rarr; 목차 생성 &rarr; 본문 집필 &rarr; 표지 디자인 &rarr; 삽화 생성] 단계가 자동으로 진행됩니다. 각 단계별로 진행 상황을 확인할 수 있습니다.</p>
               </section>
               <section>
                 <h4 className="text-lg font-bold text-slate-900 mb-2 flex items-center gap-2">
-                  <span className="w-6 h-6 bg-indigo-600 text-white rounded-full flex items-center justify-center text-xs">5</span>
+                  <span className="w-6 h-6 bg-indigo-600 text-white rounded-full flex items-center justify-center text-xs">6</span>
                   다운로드
                 </h4>
                 <p>모든 과정이 완료되면 'DOCX 다운로드' 버튼을 통해 워드 파일로 결과물을 저장할 수 있습니다.</p>

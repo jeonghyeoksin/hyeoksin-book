@@ -7,7 +7,8 @@ import {
   Download, 
   Lightbulb, 
   LayoutDashboard,
-  Key
+  Key,
+  Users
 } from 'lucide-react';
 import { AppStep } from '../types';
 
@@ -21,6 +22,7 @@ interface LayoutProps {
 
 const steps = [
   { id: AppStep.TOPIC_SELECTION, label: '주제 선정', icon: Lightbulb },
+  { id: AppStep.AUDIENCE_SETTING, label: '독자 설정', icon: Users },
   { id: AppStep.PLANNING, label: '기획 및 목차', icon: LayoutTemplate },
   { id: AppStep.WRITING, label: '원고 작성', icon: PenTool },
   { id: AppStep.COVER_DESIGN, label: '표지 생성', icon: BookOpen },

@@ -96,6 +96,28 @@ export const generateTopics = async (
 };
 
 /**
+ * Suggests a target audience based on the selected topic.
+ */
+export const suggestTargetAudience = async (title: string, description: string): Promise<string> => {
+  const prompt = `
+    전자책 제목: "${title}"
+    주제 설명: "${description}"
+    
+    이 전자책에 가장 적합한 '타겟 독자'를 한 문장으로 정의해주세요. 
+    누가 이 책을 읽으면 가장 큰 도움을 받을 수 있을지 고민하여 구체적으로 작성하세요.
+    출력은 오직 타겟 독자 정의 문장만 반환하세요.
+  `;
+
+  const ai = getAI();
+  const response = await callWithRetry(() => ai.models.generateContent({
+    model: TEXT_MODEL,
+    contents: prompt,
+  }));
+
+  return response.text?.trim() || "일반 대중";
+};
+
+/**
  * Generates a book outline (chapters).
  */
 export const generateOutline = async (title: string, audience: string, pageCount: string = 'AI추천'): Promise<string[]> => {
@@ -164,6 +186,7 @@ export const generateChapterContent = async (bookTitle: string, chapterTitle: st
          - 위 태그들을 적절히 섞어서 가독성 좋게 작성하세요.
     
     4. **형식**: 완성된 산문 형태의 줄글로 작성하세요.
+    5. **가독성 최적화**: 독자가 읽기 편하도록 **두 문단(Paragraph)마다 반드시 한 줄의 빈 줄(Blank Line)**을 삽입하여 단락을 구분하십시오.
   `;
 
   const ai = getAI();
@@ -195,7 +218,8 @@ export const generateImagePrompt = async (context: string, type: 'cover' | 'illu
     If this is a 'cover':
     1. The text on the cover MUST be 100% in Korean (Hangul).
     2. You must explicitly include instructions in the prompt to render the title in Korean characters.
-    3. DO NOT include any text related to the target audience (e.g. "for beginners", "target: ..."). Only the Title and Author (if provided) should be visible.
+    3. The author's name must be placed at the bottom center of the cover in the format: "[Author Name] 지음" (in Korean).
+    4. DO NOT include any text related to the target audience (e.g. "for beginners", "target: ..."). Only the Title and Author (if provided) should be visible.
     The visual style should be suitable for the Korean market.
     
     Output: Just the English prompt string.
