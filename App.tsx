@@ -19,8 +19,10 @@ import {
   X,
   User,
   Key,
-  Lightbulb
+  Lightbulb,
+  DollarSign
 } from 'lucide-react';
+import { ApiCostModal } from './components/ApiCostModal';
 
 interface AttachedFile {
   name: string;
@@ -36,6 +38,7 @@ const App: React.FC = () => {
   const [customApiKey, setCustomApiKey] = useState('');
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [showHowToUse, setShowHowToUse] = useState(false);
+  const [showApiCost, setShowApiCost] = useState(false);
   const [showMaintenance, setShowMaintenance] = useState(false);
   const [automationProgress, setAutomationProgress] = useState(0);
   const [isAutomating, setIsAutomating] = useState(false);
@@ -1083,6 +1086,15 @@ const App: React.FC = () => {
 
   const renderHeaderRight = () => (
     <div className="flex items-center gap-4">
+      {/* API Cost Button */}
+      <button 
+        onClick={() => setShowApiCost(true)}
+        className="flex items-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg font-semibold transition-colors text-sm border border-indigo-100"
+      >
+        <DollarSign size={16} />
+        API 비용
+      </button>
+
       {/* How to Use Button */}
       <button 
         onClick={() => setShowHowToUse(true)}
@@ -1211,6 +1223,12 @@ const App: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* API Cost Modal */}
+      <ApiCostModal 
+        isOpen={showApiCost} 
+        onClose={() => setShowApiCost(false)} 
+      />
 
       {/* Error & Maintenance Modal */}
       {showMaintenance && (
