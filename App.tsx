@@ -297,7 +297,8 @@ const App: React.FC = () => {
             setLoadingMessage('표지 디자인 프롬프트 생성 중...');
             setAutomationProgress(80);
             
-            const coverPrompt = await geminiService.generateImagePrompt(`Title: ${localEbookState.title}, Topic: ${localEbookState.topic}, Author: ${localEbookState.author}`, 'cover');
+            const authorToUse = localEbookState.author || "혁신 AI 저자";
+            const coverPrompt = await geminiService.generateImagePrompt(`Title: ${localEbookState.title}, Topic: ${localEbookState.topic}, Author: ${authorToUse}`, 'cover');
             if (!coverPrompt) throw new Error("표지 프롬프트 생성 실패");
             
             setLoadingMessage('표지 이미지를 렌더링 중입니다...');
@@ -439,7 +440,8 @@ const App: React.FC = () => {
     setLoading(true);
     setLoadingMessage('표지 디자인 프롬프트 생성 및 렌더링 중...');
     try {
-      const prompt = await geminiService.generateImagePrompt(`Title: ${ebook.title}, Topic: ${ebook.topic}`, 'cover');
+      const authorToUse = ebook.author || "혁신 AI 저자";
+      const prompt = await geminiService.generateImagePrompt(`Title: ${ebook.title}, Topic: ${ebook.topic}, Author: ${authorToUse}`, 'cover');
       setEbook(prev => ({ ...prev, coverPrompt: prompt }));
       
       const base64Image = await geminiService.generateImage(prompt, '3:4');

@@ -218,8 +218,8 @@ export const generateImagePrompt = async (context: string, type: 'cover' | 'illu
     If this is a 'cover':
     1. The text on the cover MUST be 100% in Korean (Hangul).
     2. You must explicitly include instructions in the prompt to render the title in Korean characters.
-    3. The author's name must be placed at the bottom center of the cover in the format: "[Author Name] 지음" (in Korean).
-    4. DO NOT include any text related to the target audience (e.g. "for beginners", "target: ..."). Only the Title and Author (if provided) should be visible.
+    3. The author's name is MANDATORY and must be placed at the bottom center of the cover in the format: "[Author Name] 지음" (in Korean).
+    4. DO NOT include any other names, brands, or text related to the target audience (e.g. "for beginners", "target: ..."). ONLY the Title and the specified Author Name must be visible on the cover.
     The visual style should be suitable for the Korean market.
     
     Output: Just the English prompt string.
