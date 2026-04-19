@@ -30,8 +30,13 @@ async function callWithRetry<T>(
                         errorStr.includes('429') ||
                         errorStr.includes('RESOURCE_EXHAUSTED');
     
-    if (isRateLimit && retries > 0) {
-      console.warn(`Rate limit hit. Retrying in ${delay}ms... (${retries} retries left)`);
+    const isUnavailable = error?.message?.includes('503') ||
+                          error?.status === 'UNAVAILABLE' ||
+                          errorStr.includes('503') ||
+                          errorStr.includes('UNAVAILABLE');
+    
+    if ((isRateLimit || isUnavailable) && retries > 0) {
+      console.warn(`Retryable error hit. Retrying in ${delay}ms... (${retries} retries left)`);
       await new Promise(resolve => setTimeout(resolve, delay));
       return callWithRetry(fn, retries - 1, delay * 2);
     }

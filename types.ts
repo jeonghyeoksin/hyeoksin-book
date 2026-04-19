@@ -16,6 +16,7 @@ export interface EBookState {
   chapters: Chapter[];
   coverPrompt?: string;
   coverImage?: string; // Base64 string
+  generateIllustrations: boolean;
 }
 
 export enum AppStep {

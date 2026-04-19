@@ -20,9 +20,11 @@ import {
   User,
   Key,
   Lightbulb,
-  DollarSign
+  DollarSign,
+  ClipboardList
 } from 'lucide-react';
 import { ApiCostModal } from './components/ApiCostModal';
+import { PatchNotesModal } from './components/PatchNotesModal';
 
 interface AttachedFile {
   name: string;
@@ -39,6 +41,7 @@ const App: React.FC = () => {
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [showHowToUse, setShowHowToUse] = useState(false);
   const [showApiCost, setShowApiCost] = useState(false);
+  const [showPatchNotes, setShowPatchNotes] = useState(false);
   const [showMaintenance, setShowMaintenance] = useState(false);
   const [automationProgress, setAutomationProgress] = useState(0);
   const [isAutomating, setIsAutomating] = useState(false);
@@ -98,6 +101,7 @@ const App: React.FC = () => {
     pageCount: 'AI추천',
     outline: [],
     chapters: [],
+    generateIllustrations: true,
   });
 
   // --- Helpers ---
@@ -313,7 +317,7 @@ const App: React.FC = () => {
         }
 
         // --- PHASE 5: ILLUSTRATIONS ---
-        if (currentStep <= AppStep.COVER_DESIGN) {
+        if (currentStep <= AppStep.COVER_DESIGN && localEbookState.generateIllustrations) {
             setCurrentStep(AppStep.ILLUSTRATION);
             setLoadingMessage('각 챕터별 삽화 생성 준비 중...');
             
@@ -624,6 +628,21 @@ const App: React.FC = () => {
               ))}
             </div>
           )}
+        </div>
+
+        {/* Illustration Toggle */}
+        <div className="p-4 bg-amber-50 rounded-xl border border-amber-100 flex items-start gap-3">
+            <input 
+                type="checkbox" 
+                id="generateIllustrations"
+                checked={ebook.generateIllustrations}
+                onChange={(e) => setEbook(prev => ({...prev, generateIllustrations: e.target.checked}))}
+                className="mt-1 w-5 h-5 rounded border-amber-300 text-amber-600 focus:ring-amber-500"
+            />
+            <div>
+                <label htmlFor="generateIllustrations" className="font-bold text-amber-900">삽화 이미지 생성</label>
+                <p className="text-sm text-amber-800 mt-1">삽화 이미지 생성시 API 비용이 과도하게 소모될 수 있습니다.</p>
+            </div>
         </div>
       </div>
 
@@ -1016,8 +1035,10 @@ const App: React.FC = () => {
           else handleWriteAllChapters();
           break;
         case AppStep.COVER_DESIGN:
-          if (ebook.coverImage) setCurrentStep(AppStep.ILLUSTRATION);
-          else handleGenerateCover();
+          if (ebook.coverImage) {
+              if (ebook.generateIllustrations) setCurrentStep(AppStep.ILLUSTRATION);
+              else setCurrentStep(AppStep.REVIEW_DOWNLOAD);
+          } else handleGenerateCover();
           break;
         case AppStep.ILLUSTRATION:
           if (ebook.chapters.every(c => c.imageData)) setCurrentStep(AppStep.REVIEW_DOWNLOAD);
@@ -1088,6 +1109,15 @@ const App: React.FC = () => {
 
   const renderHeaderRight = () => (
     <div className="flex items-center gap-4">
+      {/* Patch Note Button */}
+      <button 
+        onClick={() => setShowPatchNotes(true)}
+        className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-semibold transition-colors text-sm border border-slate-700"
+      >
+        <ClipboardList size={16} />
+        패치노트
+      </button>
+
       {/* API Cost Button */}
       <button 
         onClick={() => setShowApiCost(true)}
@@ -1230,6 +1260,12 @@ const App: React.FC = () => {
       <ApiCostModal 
         isOpen={showApiCost} 
         onClose={() => setShowApiCost(false)} 
+      />
+
+      {/* Patch Notes Modal */}
+      <PatchNotesModal
+        isOpen={showPatchNotes}
+        onClose={() => setShowPatchNotes(false)}
       />
 
       {/* Error & Maintenance Modal */}

@@ -76,49 +76,58 @@ export const ApiCostModal: React.FC<ApiCostModalProps> = ({ isOpen, onClose }) =
 
           {/* Section 2: Cost per Volume */}
           <section className="space-y-4">
-            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-              <Layers className="w-5 h-5 text-indigo-500" />
-              2. 전자책 분량별 예상 비용 (1,350원/$ 기준)
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <Layers className="w-5 h-5 text-indigo-500" />
+                2. 전자책 사례별 비용 시뮬레이션 (원화)
+              </h3>
+            </div>
+            
             <div className="overflow-hidden border border-slate-200 rounded-2xl">
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-50 border-bottom border-slate-200">
-                    <th className="px-4 py-3 text-sm font-bold text-slate-600">구분</th>
-                    <th className="px-4 py-3 text-sm font-bold text-slate-600">페이지</th>
-                    <th className="px-4 py-3 text-sm font-bold text-slate-600">챕터</th>
-                    <th className="px-4 py-3 text-sm font-bold text-slate-600 text-right">예상 비용</th>
+                    <th className="px-4 py-3 text-sm font-bold text-slate-600">결과물 사례</th>
+                    <th className="px-4 py-3 text-sm font-bold text-slate-600">분량(p)/챕터</th>
+                    <th className="px-4 py-3 text-sm font-bold text-slate-600 text-right">최소 비용</th>
+                    <th className="px-4 py-3 text-sm font-bold text-slate-600 text-right">최대 비용</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   <tr>
-                    <td className="px-4 py-3 text-sm font-medium text-slate-800">미니 전자책</td>
-                    <td className="px-4 py-3 text-sm text-slate-600">약 10~15p</td>
-                    <td className="px-4 py-3 text-sm text-slate-600">4개</td>
-                    <td className="px-4 py-3 text-sm font-bold text-indigo-600 text-right">약 350원</td>
+                    <td className="px-4 py-3 text-sm font-medium text-slate-800">미니 전자책 (간결)</td>
+                    <td className="px-4 py-3 text-sm text-slate-600">약 10p / 4개</td>
+                    <td className="px-4 py-3 text-sm font-bold text-indigo-400 text-right">240원</td>
+                    <td className="px-4 py-3 text-sm font-bold text-indigo-600 text-right">450원</td>
                   </tr>
                   <tr className="bg-indigo-50/30">
-                    <td className="px-4 py-3 text-sm font-medium text-slate-800">표준 전자책</td>
-                    <td className="px-4 py-3 text-sm text-slate-600">약 30~40p</td>
-                    <td className="px-4 py-3 text-sm text-slate-600">10개</td>
-                    <td className="px-4 py-3 text-sm font-bold text-indigo-600 text-right">약 850원</td>
+                    <td className="px-4 py-3 text-sm font-medium text-slate-800">비즈니스 표준 (권장)</td>
+                    <td className="px-4 py-3 text-sm text-slate-600">약 30p / 10개</td>
+                    <td className="px-4 py-3 text-sm font-bold text-indigo-400 text-right">620원</td>
+                    <td className="px-4 py-3 text-sm font-bold text-indigo-600 text-right">980원</td>
                   </tr>
                   <tr>
-                    <td className="px-4 py-3 text-sm font-medium text-slate-800">전문 서적급</td>
-                    <td className="px-4 py-3 text-sm text-slate-600">약 50~60p</td>
-                    <td className="px-4 py-3 text-sm text-slate-600">15개</td>
-                    <td className="px-4 py-3 text-sm font-bold text-indigo-600 text-right">약 1,250원</td>
+                    <td className="px-4 py-3 text-sm font-medium text-slate-800">전문 전략서 (심층)</td>
+                    <td className="px-4 py-3 text-sm text-slate-600">약 60p / 15개</td>
+                    <td className="px-4 py-3 text-sm font-bold text-indigo-400 text-right">1,150원</td>
+                    <td className="px-4 py-3 text-sm font-bold text-indigo-600 text-right">1,680원</td>
                   </tr>
                   <tr>
-                    <td className="px-4 py-3 text-sm font-medium text-slate-800">대형 프로젝트</td>
-                    <td className="px-4 py-3 text-sm text-slate-600">약 100p+</td>
-                    <td className="px-4 py-3 text-sm text-slate-600">30개</td>
-                    <td className="px-4 py-3 text-sm font-bold text-indigo-600 text-right">약 2,500원</td>
+                    <td className="px-4 py-3 text-sm font-medium text-slate-800">장편 프로젝트 (방대)</td>
+                    <td className="px-4 py-3 text-sm text-slate-600">약 100p+ / 30개</td>
+                    <td className="px-4 py-3 text-sm font-bold text-indigo-400 text-right">2,300원</td>
+                    <td className="px-4 py-3 text-sm font-bold text-indigo-600 text-right">3,500원</td>
                   </tr>
                 </tbody>
               </table>
             </div>
-            <p className="text-xs text-slate-400 italic">* 표지 이미지 생성 비용(약 40원)이 포함된 금액입니다.</p>
+            
+            <div className="p-4 bg-orange-50 border border-orange-100 rounded-2xl">
+              <p className="text-xs text-orange-800 leading-relaxed font-medium">
+                * [중요] 모든 API 비용은 원화로 표시되었으나 환율 및 생성되는 실제 텍스트 분량, AI의 추론(Thinking) 깊이에 따라 현실적인 오차가 발생할 수 있습니다. 
+                최소 비용은 삽화 미생성 기준이며, 최대 비용은 풍부한 삽화와 고밀도 추론 적용 시의 예상치입니다.
+              </p>
+            </div>
           </section>
 
           {/* Section 3: Key Factors */}
