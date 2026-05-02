@@ -89,34 +89,34 @@ export const ApiCostModal: React.FC<ApiCostModalProps> = ({ isOpen, onClose }) =
                   <tr className="bg-slate-50 border-bottom border-slate-200">
                     <th className="px-4 py-3 text-sm font-bold text-slate-600">결과물 사례</th>
                     <th className="px-4 py-3 text-sm font-bold text-slate-600">분량(p)/챕터</th>
-                    <th className="px-4 py-3 text-sm font-bold text-slate-600 text-right">최소 비용</th>
-                    <th className="px-4 py-3 text-sm font-bold text-slate-600 text-right">최대 비용</th>
+                    <th className="px-4 py-3 text-sm font-bold text-slate-600 text-right">삽화 미생성</th>
+                    <th className="px-4 py-3 text-sm font-bold text-slate-600 text-right">삽화 포함</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   <tr>
                     <td className="px-4 py-3 text-sm font-medium text-slate-800">미니 전자책 (간결)</td>
                     <td className="px-4 py-3 text-sm text-slate-600">약 10p / 4개</td>
-                    <td className="px-4 py-3 text-sm font-bold text-indigo-400 text-right">240원</td>
-                    <td className="px-4 py-3 text-sm font-bold text-indigo-600 text-right">450원</td>
+                    <td className="px-4 py-3 text-sm font-bold text-indigo-400 text-right">약 240원</td>
+                    <td className="px-4 py-3 text-sm font-bold text-indigo-600 text-right">약 400원</td>
                   </tr>
                   <tr className="bg-indigo-50/30">
                     <td className="px-4 py-3 text-sm font-medium text-slate-800">비즈니스 표준 (권장)</td>
                     <td className="px-4 py-3 text-sm text-slate-600">약 30p / 10개</td>
-                    <td className="px-4 py-3 text-sm font-bold text-indigo-400 text-right">620원</td>
-                    <td className="px-4 py-3 text-sm font-bold text-indigo-600 text-right">980원</td>
+                    <td className="px-4 py-3 text-sm font-bold text-indigo-400 text-right">약 620원</td>
+                    <td className="px-4 py-3 text-sm font-bold text-indigo-600 text-right">약 1,180원</td>
                   </tr>
                   <tr>
                     <td className="px-4 py-3 text-sm font-medium text-slate-800">전문 전략서 (심층)</td>
                     <td className="px-4 py-3 text-sm text-slate-600">약 60p / 15개</td>
-                    <td className="px-4 py-3 text-sm font-bold text-indigo-400 text-right">1,150원</td>
-                    <td className="px-4 py-3 text-sm font-bold text-indigo-600 text-right">1,680원</td>
+                    <td className="px-4 py-3 text-sm font-bold text-indigo-400 text-right">약 1,150원</td>
+                    <td className="px-4 py-3 text-sm font-bold text-indigo-600 text-right">약 1,980원</td>
                   </tr>
                   <tr>
                     <td className="px-4 py-3 text-sm font-medium text-slate-800">장편 프로젝트 (방대)</td>
                     <td className="px-4 py-3 text-sm text-slate-600">약 100p+ / 30개</td>
-                    <td className="px-4 py-3 text-sm font-bold text-indigo-400 text-right">2,300원</td>
-                    <td className="px-4 py-3 text-sm font-bold text-indigo-600 text-right">3,500원</td>
+                    <td className="px-4 py-3 text-sm font-bold text-indigo-400 text-right">약 2,300원</td>
+                    <td className="px-4 py-3 text-sm font-bold text-indigo-600 text-right">약 3,950원</td>
                   </tr>
                 </tbody>
               </table>
@@ -124,8 +124,8 @@ export const ApiCostModal: React.FC<ApiCostModalProps> = ({ isOpen, onClose }) =
             
             <div className="p-4 bg-orange-50 border border-orange-100 rounded-2xl">
               <p className="text-xs text-orange-800 leading-relaxed font-medium">
-                * [중요] 모든 API 비용은 원화로 표시되었으나 환율 및 생성되는 실제 텍스트 분량, AI의 추론(Thinking) 깊이에 따라 현실적인 오차가 발생할 수 있습니다. 
-                최소 비용은 삽화 미생성 기준이며, 최대 비용은 풍부한 삽화와 고밀도 추론 적용 시의 예상치입니다.
+                * [중요] 모든 API 비용은 원화로 표시되었으며, 삽화 생성 시 건당 약 40원(Gemini 3.1 Flash Image 기준)의 비용이 추가됩니다. 
+                텍스트 분량과 AI의 추론(Thinking) 깊이에 따라 실제 청구액에는 다소 차이가 있을 수 있습니다.
               </p>
             </div>
           </section>

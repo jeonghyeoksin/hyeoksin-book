@@ -101,7 +101,7 @@ const App: React.FC = () => {
     pageCount: 'AI추천',
     outline: [],
     chapters: [],
-    generateIllustrations: true,
+    generateIllustrations: false,
   });
 
   // --- Helpers ---
@@ -350,6 +350,10 @@ const App: React.FC = () => {
         // --- PHASE 6: FINISH ---
         setAutomationProgress(100);
         setCurrentStep(AppStep.REVIEW_DOWNLOAD);
+        
+        // --- AUTO DOWNLOAD ---
+        setLoadingMessage('문서 파일 생성 중...');
+        await generateAndDownloadDocx(localEbookState);
 
     } catch (error) {
         console.error(error);
