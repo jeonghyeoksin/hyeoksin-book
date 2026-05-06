@@ -9,6 +9,16 @@ interface PatchNote {
 
 const patchNotes: PatchNote[] = [
   {
+    date: '2026-05-06',
+    version: 'v1.4.1',
+    changes: [
+      '전역 시스템 알림 UI 구축 (기본 브라우저 팝업 알림 제거)',
+      '전자책 완성 시 DOCX 파일 자동 다운로드 기능 추가',
+      '불필요한 비용 발생 방지를 위해 "삽화 자동 생성" 기본값 비활성화',
+      '결과물에 불필요한 강조 태그 노출 방지를 위한 프롬프트 최적화'
+    ]
+  },
+  {
     date: '2026-04-19',
     version: 'v1.4.0',
     changes: [

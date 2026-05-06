@@ -21,7 +21,11 @@ import {
   Key,
   Lightbulb,
   DollarSign,
-  ClipboardList
+  ClipboardList,
+  Eye,
+  EyeOff,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { ApiCostModal } from './components/ApiCostModal';
 import { PatchNotesModal } from './components/PatchNotesModal';
@@ -43,8 +47,11 @@ const App: React.FC = () => {
   const [showApiCost, setShowApiCost] = useState(false);
   const [showPatchNotes, setShowPatchNotes] = useState(false);
   const [showMaintenance, setShowMaintenance] = useState(false);
+  const [globalError, setGlobalError] = useState<string | null>(null);
   const [automationProgress, setAutomationProgress] = useState(0);
   const [isAutomating, setIsAutomating] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   const checkKey = async () => {
     const storedKey = localStorage.getItem('custom_gemini_api_key');
@@ -78,12 +85,12 @@ const App: React.FC = () => {
       localStorage.setItem('custom_gemini_api_key', apiKeyInput.trim());
       setCustomApiKey(apiKeyInput.trim());
       setHasApiKey(true);
-      alert('API 키가 적용되었습니다.');
+      setGlobalError('API 키가 적용되었습니다.');
     } else {
       localStorage.removeItem('custom_gemini_api_key');
       setCustomApiKey('');
       await checkKey();
-      alert('API 키가 삭제되었습니다.');
+      setGlobalError('API 키가 삭제되었습니다.');
     }
   };
   
@@ -174,7 +181,7 @@ const App: React.FC = () => {
       setTopicIdeas(topics);
     } catch (e) {
       console.error(e);
-      alert('주제 생성 중 오류가 발생했습니다.');
+      setGlobalError('주제 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
     } finally {
       setLoading(false);
     }
@@ -188,7 +195,7 @@ const App: React.FC = () => {
         await (window as any).aistudio.openSelectKey();
         setHasApiKey(true);
       } else {
-        alert("API 키가 필요합니다. 설정을 확인해주세요.");
+        setGlobalError("API 키가 필요합니다. 상단 우측 설정을 확인해주세요.");
         return;
       }
     }
@@ -204,7 +211,7 @@ const App: React.FC = () => {
         // --- PHASE 0: TOPIC GENERATION (If starting from scratch) ---
         if (currentStep === AppStep.TOPIC_SELECTION && !selectedTopic && !ebook.title) {
             if (!topicKeyword && attachedFiles.length === 0) {
-                alert("키워드를 입력하거나 파일을 첨부해주세요.");
+                setGlobalError("키워드를 입력하거나 파일을 첨부해주세요.");
                 setLoading(false);
                 setIsAutomating(false);
                 return;
@@ -357,7 +364,7 @@ const App: React.FC = () => {
 
     } catch (error) {
         console.error(error);
-        alert("자동 생성 과정 중 오류가 발생했습니다.");
+        setGlobalError("자동 생성 과정 중 오류가 발생했습니다.");
     } finally {
         setLoading(false);
         setIsAutomating(false);
@@ -394,7 +401,7 @@ const App: React.FC = () => {
     const audienceToUse = audienceOverride || ebook.targetAudience;
 
     if (!titleToUse) {
-        alert("제목이 설정되지 않았습니다.");
+        setGlobalError("제목이 설정되지 않았습니다.");
         return;
     }
 
@@ -409,7 +416,7 @@ const App: React.FC = () => {
       }));
     } catch (e) {
       console.error(e);
-      alert('목차 생성 오류');
+      setGlobalError('목차 생성 오류가 발생했습니다.');
     } finally {
       setLoading(false);
     }
@@ -493,7 +500,7 @@ const App: React.FC = () => {
         await generateAndDownloadDocx(ebook);
     } catch (e) {
         console.error(e);
-        alert('파일 생성 중 오류가 발생했습니다.');
+        setGlobalError('파일 생성 중 오류가 발생했습니다.');
     }
   };
 
@@ -506,13 +513,13 @@ const App: React.FC = () => {
       {/* 16:9 Hero Banner at the top of Topic Selection */}
       <div className="w-full aspect-video relative rounded-3xl overflow-hidden shadow-2xl mb-12 flex items-center justify-center group">
         <img 
-          src="https://images.unsplash.com/photo-1532012197267-da84d127e765?q=80&w=2000&auto=format&fit=crop" 
+          src="https://images.unsplash.com/photo-1495446811339-cad18cdd3c02?q=80&w=2000&auto=format&fit=crop" 
           alt="Innovation E-book AI Hero" 
           className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
           referrerPolicy="no-referrer"
         />
-        <div className="absolute inset-0 bg-gradient-to-br from-indigo-900/90 via-purple-900/80 to-slate-900/90 mix-blend-multiply"></div>
-        <div className="absolute inset-0 bg-black/30"></div>
+        <div className="absolute inset-0 bg-gradient-to-br from-indigo-900/60 via-indigo-800/50 to-slate-800/60 mix-blend-multiply"></div>
+        <div className="absolute inset-0 bg-black/20"></div>
         
         <div className="relative z-10 text-center px-6 flex flex-col items-center">
           <div className="inline-flex items-center justify-center p-4 bg-white/10 backdrop-blur-md rounded-2xl mb-6 border border-white/20 shadow-2xl">
@@ -1024,11 +1031,11 @@ const App: React.FC = () => {
       switch(currentStep) {
         case AppStep.TOPIC_SELECTION:
           if (ebook.title) setCurrentStep(AppStep.AUDIENCE_SETTING);
-          else alert('주제를 먼저 선택해주세요.');
+          else setGlobalError('주제를 먼저 선택해주세요.');
           break;
         case AppStep.AUDIENCE_SETTING:
           if (ebook.targetAudience) setCurrentStep(AppStep.PLANNING);
-          else alert('독자 설정을 완료해주세요.');
+          else setGlobalError('독자 설정을 완료해주세요.');
           break;
         case AppStep.PLANNING:
           if (ebook.outline.length > 0) setCurrentStep(AppStep.WRITING);
@@ -1054,7 +1061,7 @@ const App: React.FC = () => {
     };
 
     return (
-      <div className="fixed bottom-0 left-64 right-0 bg-white border-t border-slate-200 p-4 flex items-center justify-between z-40 shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
+      <div className={`fixed bottom-0 right-0 bg-white border-t border-slate-200 p-4 flex items-center justify-between z-40 shadow-[0_-4px_10px_rgba(0,0,0,0.05)] transition-all duration-300 ${isSidebarOpen ? 'left-64' : 'left-0'}`}>
         <div className="flex gap-3">
           <button 
             onClick={handlePrev}
@@ -1153,13 +1160,21 @@ const App: React.FC = () => {
           </div>
         )}
         <div className="flex items-center gap-2">
-          <input 
-            type="password" 
-            value={apiKeyInput}
-            onChange={(e) => setApiKeyInput(e.target.value)}
-            placeholder="Gemini API 키 입력"
-            className="px-3 py-1.5 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-48"
-          />
+          <div className="relative">
+            <input 
+              type={showApiKey ? "text" : "password"} 
+              value={apiKeyInput}
+              onChange={(e) => setApiKeyInput(e.target.value)}
+              placeholder="Gemini API 키 입력"
+              className="px-3 py-1.5 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-48 pr-8"
+            />
+            <button
+              onClick={() => setShowApiKey(!showApiKey)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
+            >
+              {showApiKey ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+          </div>
           <button 
             onClick={handleSaveApiKey}
             className="px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 transition-colors"
@@ -1177,6 +1192,8 @@ const App: React.FC = () => {
       setCurrentStep={setCurrentStep}
       onSettingsOpen={() => {}}
       headerRight={renderHeaderRight()}
+      isSidebarOpen={isSidebarOpen}
+      setIsSidebarOpen={setIsSidebarOpen}
     >
       {currentStep === AppStep.TOPIC_SELECTION && renderTopicSelection()}
       {currentStep === AppStep.AUDIENCE_SETTING && renderAudienceSetting()}
@@ -1271,6 +1288,33 @@ const App: React.FC = () => {
         isOpen={showPatchNotes}
         onClose={() => setShowPatchNotes(false)}
       />
+
+      {/* Global Error Modal */}
+      {globalError && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full animate-scale-in overflow-hidden">
+            <div className="p-6 bg-indigo-50 border-b border-indigo-100 flex items-center justify-between">
+              <h3 className="text-xl font-bold text-indigo-900 flex items-center gap-2">
+                알림
+              </h3>
+              <button onClick={() => setGlobalError(null)} className="p-1 hover:bg-indigo-100 rounded-full">
+                <X size={20} className="text-indigo-900" />
+              </button>
+            </div>
+            <div className="p-8 text-slate-700">
+              <p className="mb-4 font-medium leading-relaxed">{globalError}</p>
+            </div>
+            <div className="p-6 bg-slate-50 flex justify-end">
+              <button 
+                onClick={() => setGlobalError(null)}
+                className="px-6 py-2 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 w-full"
+              >
+                확인
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Error & Maintenance Modal */}
       {showMaintenance && (

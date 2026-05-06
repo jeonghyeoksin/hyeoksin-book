@@ -8,7 +8,9 @@ import {
   Lightbulb, 
   LayoutDashboard,
   Key,
-  Users
+  Users,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { AppStep } from '../types';
 
@@ -18,6 +20,8 @@ interface LayoutProps {
   setCurrentStep: (step: AppStep) => void;
   onSettingsOpen: () => void;
   headerRight?: React.ReactNode;
+  isSidebarOpen?: boolean;
+  setIsSidebarOpen?: (isOpen: boolean) => void;
 }
 
 const steps = [
@@ -30,20 +34,20 @@ const steps = [
   { id: AppStep.REVIEW_DOWNLOAD, label: '최종 및 다운로드', icon: Download },
 ];
 
-export const Layout: React.FC<LayoutProps> = ({ currentStep, children, setCurrentStep, onSettingsOpen, headerRight }) => {
+export const Layout: React.FC<LayoutProps> = ({ currentStep, children, setCurrentStep, onSettingsOpen, headerRight, isSidebarOpen = true, setIsSidebarOpen }) => {
   return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden">
+    <div className="flex h-screen bg-slate-50 overflow-hidden relative">
       {/* Sidebar */}
-      <aside className="w-64 bg-slate-900 text-white flex flex-col shadow-xl z-10">
-        <div className="p-6 border-b border-slate-700">
+      <aside className={`bg-slate-900 text-white flex flex-col shadow-xl z-20 transition-all duration-300 ${isSidebarOpen ? 'w-64' : 'w-20'}`}>
+        <div className="p-6 border-b border-slate-700 flex items-center justify-between">
           <button 
             onClick={() => setCurrentStep(AppStep.TOPIC_SELECTION)}
-            className="flex items-center gap-2 hover:opacity-80 transition-opacity text-left w-full"
+            className={`flex items-center gap-2 hover:opacity-80 transition-opacity text-left ${isSidebarOpen ? 'w-full' : 'w-auto'}`}
           >
             <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center shrink-0">
               <BookOpen size={20} className="text-white" />
             </div>
-            <h1 className="text-xl font-bold tracking-tight">혁신 전자책 AI</h1>
+            {isSidebarOpen && <h1 className="text-xl font-bold tracking-tight whitespace-nowrap overflow-hidden">혁신 전자책 AI</h1>}
           </button>
         </div>
 
@@ -59,7 +63,8 @@ export const Layout: React.FC<LayoutProps> = ({ currentStep, children, setCurren
                   <button
                     onClick={() => isPast || isActive ? setCurrentStep(step.id) : null}
                     disabled={!isPast && !isActive}
-                    className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200
+                    className={`w-full flex items-center gap-3 py-3 font-medium rounded-lg transition-all duration-200
+                      ${isSidebarOpen ? 'px-4 text-sm' : 'justify-center px-0'}
                       ${isActive 
                         ? 'bg-indigo-600 text-white shadow-md' 
                         : isPast 
@@ -67,10 +72,11 @@ export const Layout: React.FC<LayoutProps> = ({ currentStep, children, setCurren
                           : 'text-slate-500 cursor-not-allowed opacity-60'
                       }
                     `}
+                    title={!isSidebarOpen ? step.label : undefined}
                   >
-                    <Icon size={18} />
-                    {step.label}
-                    {isPast && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-green-400"></div>}
+                    <Icon size={18} className="shrink-0" />
+                    {isSidebarOpen && <span>{step.label}</span>}
+                    {isPast && isSidebarOpen && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-green-400"></div>}
                   </button>
                 </li>
               );
@@ -78,18 +84,28 @@ export const Layout: React.FC<LayoutProps> = ({ currentStep, children, setCurren
           </ul>
         </nav>
 
-        <div className="p-4 border-t border-slate-700 bg-slate-950 flex flex-col gap-2">
-          <div className="flex items-center justify-between px-1">
-            <div>
-              <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">Developer</p>
-              <p className="text-xs font-bold text-white">정혁신</p>
+        {isSidebarOpen && (
+          <div className="p-4 border-t border-slate-700 bg-slate-950 flex flex-col gap-2">
+            <div className="flex items-center justify-between px-1">
+              <div>
+                <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">Developer</p>
+                <p className="text-xs font-bold text-white">정혁신</p>
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </aside>
 
+      {/* Sidebar Toggle Button */}
+      <button
+        onClick={() => setIsSidebarOpen?.(!isSidebarOpen)}
+        className={`absolute top-6 z-30 flex items-center justify-center w-6 h-6 bg-white border border-slate-300 rounded-full shadow-md text-slate-600 hover:text-indigo-600 hover:border-indigo-300 transition-all duration-300 ${isSidebarOpen ? 'left-[244px]' : 'left-[68px]'}`}
+      >
+        {isSidebarOpen ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
+      </button>
+
       {/* Main Content */}
-      <main className="flex-1 overflow-auto relative flex flex-col">
+      <main className="flex-1 overflow-auto relative flex flex-col w-full min-w-0">
         {headerRight && (
           <div className="w-full p-4 flex justify-end border-b border-slate-200 bg-white shadow-sm z-10">
             {headerRight}
