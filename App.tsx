@@ -168,6 +168,27 @@ const App: React.FC = () => {
   };
 
 
+  // --- Error Handling Helper ---
+  const getFriendlyErrorMessage = (e: any, defaultMsg: string) => {
+    console.error("Operation Error:", e);
+    const errorStr = JSON.stringify(e).toUpperCase();
+    const msg = (e.message || "").toUpperCase();
+
+    if (errorStr.includes('429') || errorStr.includes('RESOURCE_EXHAUSTED') || msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED')) {
+      return 'API 호출량이 초과되었습니다. 1분 후 다시 시도해주세요.';
+    }
+    if (errorStr.includes('SAFETY') || msg.includes('SAFETY')) {
+      return '입력 내용이 AI 안전 정책에 의해 차단되었습니다. 키워드를 변경해주세요.';
+    }
+    if (errorStr.includes('API_KEY_INVALID') || msg.includes('API_KEY_INVALID') || errorStr.includes('401') || msg.includes('401')) {
+      return '유효하지 않은 API 키입니다. 우측 상단 설정을 확인해주세요.';
+    }
+    if (errorStr.includes('TIMEOUT') || msg.includes('TIMEOUT')) {
+      return '서버 응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.';
+    }
+    return defaultMsg;
+  };
+
   // --- Step Handlers ---
 
   // Step 1: Generate Ideas
@@ -179,9 +200,8 @@ const App: React.FC = () => {
     try {
       const topics = await geminiService.generateTopics(topicKeyword, attachedFiles);
       setTopicIdeas(topics);
-    } catch (e) {
-      console.error(e);
-      setGlobalError('주제 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+    } catch (e: any) {
+      setGlobalError(getFriendlyErrorMessage(e, '주제 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.'));
     } finally {
       setLoading(false);
     }
@@ -363,8 +383,7 @@ const App: React.FC = () => {
         await generateAndDownloadDocx(localEbookState);
 
     } catch (error) {
-        console.error(error);
-        setGlobalError("자동 생성 과정 중 오류가 발생했습니다.");
+        setGlobalError(getFriendlyErrorMessage(error, "자동 생성 과정 중 오류가 발생했습니다."));
     } finally {
         setLoading(false);
         setIsAutomating(false);
@@ -415,8 +434,7 @@ const App: React.FC = () => {
         chapters: outline.map((title, idx) => ({ id: idx, title, content: '' }))
       }));
     } catch (e) {
-      console.error(e);
-      setGlobalError('목차 생성 오류가 발생했습니다.');
+      setGlobalError(getFriendlyErrorMessage(e, '목차 생성 오류가 발생했습니다.'));
     } finally {
       setLoading(false);
     }

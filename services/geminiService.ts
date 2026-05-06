@@ -1,8 +1,16 @@
-import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
+import { GoogleGenAI, Type, GenerateContentResponse, HarmCategory, HarmBlockThreshold } from "@google/genai";
 
 // Model Constants
 const TEXT_MODEL = 'gemini-3.1-pro-preview';
 const IMAGE_MODEL = 'gemini-3.1-flash-image-preview';
+
+const SAFETY_SETTINGS = [
+  { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+  { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+  { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+  { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+  { category: HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
+];
 
 /**
  * Helper to get a fresh GoogleGenAI instance with the current API key.
@@ -94,6 +102,7 @@ export const generateTopics = async (
         },
       },
       thinkingConfig: { thinkingBudget: 1024 },
+      safetySettings: SAFETY_SETTINGS,
     },
   }));
 
@@ -117,6 +126,9 @@ export const suggestTargetAudience = async (title: string, description: string):
   const response = await callWithRetry(() => ai.models.generateContent({
     model: TEXT_MODEL,
     contents: prompt,
+    config: {
+      safetySettings: SAFETY_SETTINGS,
+    }
   }));
 
   return response.text?.trim() || "일반 대중";
@@ -154,6 +166,7 @@ export const generateOutline = async (title: string, audience: string, pageCount
         items: { type: Type.STRING },
       },
       thinkingConfig: { thinkingBudget: 2048 },
+      safetySettings: SAFETY_SETTINGS,
     },
   }));
 
@@ -196,6 +209,7 @@ export const generateChapterContent = async (bookTitle: string, chapterTitle: st
     config: {
       temperature: 0.7,
       thinkingConfig: { thinkingBudget: 4096 },
+      safetySettings: SAFETY_SETTINGS,
     },
   }));
 
@@ -229,6 +243,9 @@ export const generateImagePrompt = async (context: string, type: 'cover' | 'illu
   const response = await callWithRetry(() => ai.models.generateContent({
     model: TEXT_MODEL,
     contents: prompt,
+    config: {
+      safetySettings: SAFETY_SETTINGS,
+    }
   }));
 
   return response.text || "";
@@ -249,7 +266,8 @@ export const generateImage = async (prompt: string, aspectRatio: '3:4' | '4:3' =
         imageConfig: {
           aspectRatio: aspectRatio,
           imageSize: "1K"
-        }
+        },
+        safetySettings: SAFETY_SETTINGS,
       }
     }));
 
