@@ -513,13 +513,13 @@ const App: React.FC = () => {
       {/* 16:9 Hero Banner at the top of Topic Selection */}
       <div className="w-full aspect-video relative rounded-3xl overflow-hidden shadow-2xl mb-12 flex items-center justify-center group">
         <img 
-          src="https://images.unsplash.com/photo-1495446811339-cad18cdd3c02?q=80&w=2000&auto=format&fit=crop" 
+          src="https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?q=80&w=2000&auto=format&fit=crop" 
           alt="Innovation E-book AI Hero" 
           className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
           referrerPolicy="no-referrer"
         />
-        <div className="absolute inset-0 bg-gradient-to-br from-indigo-900/60 via-indigo-800/50 to-slate-800/60 mix-blend-multiply"></div>
-        <div className="absolute inset-0 bg-black/20"></div>
+        <div className="absolute inset-0 bg-gradient-to-br from-indigo-600/40 via-purple-600/30 to-slate-900/50 mix-blend-multiply"></div>
+        <div className="absolute inset-0 bg-black/10"></div>
         
         <div className="relative z-10 text-center px-6 flex flex-col items-center">
           <div className="inline-flex items-center justify-center p-4 bg-white/10 backdrop-blur-md rounded-2xl mb-6 border border-white/20 shadow-2xl">
