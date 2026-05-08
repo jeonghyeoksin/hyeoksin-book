@@ -228,13 +228,10 @@ export const generateImagePrompt = async (context: string, type: 'cover' | 'illu
     
     Style: ${type === 'cover' ? 'Minimalist, Modern, Eye-catching, High resolution, Typography friendly' : 'Digital Art, Storybook style, Clean lines'}
     
-    [IMPORTANT FOR COVER]
-    If this is a 'cover':
-    1. The text on the cover MUST be 100% in Korean (Hangul).
-    2. You must explicitly include instructions in the prompt to render the title in Korean characters.
-    3. The author's name is MANDATORY and must be placed at the bottom center of the cover in the format: "[Author Name] 지음" (in Korean).
-    4. DO NOT include any other names, brands, or text related to the target audience (e.g. "for beginners", "target: ..."). ONLY the Title and the specified Author Name must be visible on the cover.
-    The visual style should be suitable for the Korean market.
+    [CRITICAL INSTRUCTION FOR ALL IMAGES]
+    DO NOT include any text, typography, fonts, characters, letters, or words in the image.
+    The image must be purely visual art without any written elements, because AI image generators struggle with rendering Korean text correctly.
+    Even for the book cover, DO NOT add a title or author name to the image itself.
     
     Output: Just the English prompt string.
   `;

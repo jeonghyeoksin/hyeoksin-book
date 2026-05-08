@@ -9,6 +9,24 @@ interface PatchNote {
 
 const patchNotes: PatchNote[] = [
   {
+    date: 'Upcoming',
+    version: 'Next',
+    changes: [
+      '사용자 맞춤형 전자책 템플릿 저장 기능 지원 예정',
+      '다양한 추출 포맷(EPUB, Markdown) 추가 지원',
+      '에디터 내 실시간 자동 저장 및 히스토리 복원 기능'
+    ]
+  },
+  {
+    date: '2026-05-08',
+    version: 'v1.4.2',
+    changes: [
+      '표지 및 삽화 이미지 생성 시 텍스트 제거 지시를 통한 한글 깨짐 현상 완벽 방지',
+      'API 한도 초과(429), 안전 정책 차단 등 시스템 에러 발생 시 직관적인 한국어 에러 메시지로 개선',
+      '사용자 친화적 피드백 제공을 위한 에러 핸들링 유틸리티 도입'
+    ]
+  },
+  {
     date: '2026-05-06',
     version: 'v1.4.1',
     changes: [
@@ -115,11 +133,11 @@ export const PatchNotesModal: React.FC<PatchNotesModalProps> = ({ isOpen, onClos
             {patchNotes.map((note, idx) => (
               <div key={idx} className="relative pl-8 border-l-2 border-slate-200 pb-2 last:pb-0">
                 {/* Timeline Dot */}
-                <div className={`absolute -left-[9px] top-0 w-4 h-4 rounded-full border-2 border-white shadow-sm ${idx === 0 ? 'bg-indigo-600 scale-125' : 'bg-slate-300'}`}></div>
+                <div className={`absolute -left-[9px] top-0 w-4 h-4 rounded-full border-2 border-white shadow-sm ${note.date === 'Upcoming' ? 'bg-amber-500 scale-125' : (idx === 0 || (idx === 1 && patchNotes[0].date === 'Upcoming') ? 'bg-indigo-600 scale-125' : 'bg-slate-300')}`}></div>
                 
                 <div className="flex items-center gap-3 mb-2">
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${idx === 0 ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-600'}`}>
-                    {idx === 0 ? 'Latest' : note.version}
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${note.date === 'Upcoming' ? 'bg-amber-100 text-amber-700' : (idx === 0 || (idx === 1 && patchNotes[0].date === 'Upcoming') ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-600')}`}>
+                    {note.date === 'Upcoming' ? 'Upcoming' : (idx === 0 || (idx === 1 && patchNotes[0].date === 'Upcoming') ? 'Latest' : note.version)}
                   </span>
                   <div className="flex items-center gap-1 text-slate-400 text-xs font-medium">
                     <Calendar size={12} />
@@ -127,11 +145,11 @@ export const PatchNotesModal: React.FC<PatchNotesModalProps> = ({ isOpen, onClos
                   </div>
                 </div>
 
-                <div className={`p-4 rounded-2xl border ${idx === 0 ? 'bg-white border-indigo-200 shadow-md' : 'bg-slate-50 border-slate-200'}`}>
+                <div className={`p-4 rounded-2xl border ${note.date === 'Upcoming' ? 'bg-amber-50/50 border-amber-200 shadow-sm' : (idx === 0 || (idx === 1 && patchNotes[0].date === 'Upcoming') ? 'bg-white border-indigo-200 shadow-md' : 'bg-slate-50 border-slate-200')}`}>
                   <ul className="space-y-2">
                     {note.changes.map((change, cIdx) => (
                       <li key={cIdx} className="flex items-start gap-2 text-sm text-slate-700 leading-relaxed">
-                        <CheckCircle2 size={14} className={`mt-0.5 shrink-0 ${idx === 0 ? 'text-indigo-600' : 'text-slate-400'}`} />
+                        <CheckCircle2 size={14} className={`mt-0.5 shrink-0 ${note.date === 'Upcoming' ? 'text-amber-500' : (idx === 0 || (idx === 1 && patchNotes[0].date === 'Upcoming') ? 'text-indigo-600' : 'text-slate-400')}`} />
                         {change}
                       </li>
                     ))}
