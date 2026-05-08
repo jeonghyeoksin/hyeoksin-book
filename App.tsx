@@ -186,6 +186,12 @@ const App: React.FC = () => {
     if (errorStr.includes('TIMEOUT') || msg.includes('TIMEOUT')) {
       return '서버 응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.';
     }
+    if (errorStr.includes('JSON') || msg.includes('JSON')) {
+      return 'AI 텍스트 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
+    }
+    if (errorStr.includes('FAILED TO FETCH') || msg.includes('FAILED TO FETCH') || errorStr.includes('NETWORK') || msg.includes('NETWORK')) {
+      return '네트워크 연결 오류입니다. 인터넷 환경을 확인해주세요.';
+    }
     return defaultMsg;
   };
 

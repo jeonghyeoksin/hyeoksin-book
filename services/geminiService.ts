@@ -17,7 +17,7 @@ const SAFETY_SETTINGS = [
  */
 const getAI = () => {
   const customKey = localStorage.getItem('custom_gemini_api_key');
-  const apiKey = customKey || process.env.API_KEY || '';
+  const apiKey = customKey || process.env.GEMINI_API_KEY || '';
   return new GoogleGenAI({ apiKey });
 };
 
@@ -51,6 +51,28 @@ async function callWithRetry<T>(
     throw error;
   }
 }
+
+/* Helper to safely parse JSON returned from the API */
+const parseJSONFallback = (text: string, defaultOutput: any) => {
+  if (!text) return defaultOutput;
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    console.warn("Direct JSON parse failed, trying fallback extraction");
+    try {
+      let rawText = text;
+      if (rawText.includes("```json")) {
+        rawText = rawText.split("```json")[1].split("```")[0].trim();
+      } else if (rawText.includes("```")) {
+        rawText = rawText.split("```")[1].split("```")[0].trim();
+      }
+      return JSON.parse(rawText);
+    } catch (e2) {
+      console.error("Fallback JSON parsing also failed", e2);
+      throw new Error("JSON_PARSE_ERROR: " + String(e2));
+    }
+  }
+};
 
 /**
  * Generates topic ideas based on a keyword and optional reference files.
@@ -106,7 +128,7 @@ export const generateTopics = async (
     },
   }));
 
-  return JSON.parse(response.text || "[]");
+  return parseJSONFallback(response.text || "", []);
 };
 
 /**
@@ -170,7 +192,7 @@ export const generateOutline = async (title: string, audience: string, pageCount
     },
   }));
 
-  return JSON.parse(response.text || "[]");
+  return parseJSONFallback(response.text || "", []);
 };
 
 /**
