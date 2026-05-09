@@ -192,6 +192,9 @@ const App: React.FC = () => {
     if (errorStr.includes('FAILED TO FETCH') || msg.includes('FAILED TO FETCH') || errorStr.includes('NETWORK') || msg.includes('NETWORK')) {
       return '네트워크 연결 오류입니다. 인터넷 환경을 확인해주세요.';
     }
+    if (errorStr.includes('UNSUPPORTED MIME TYPE') || msg.includes('UNSUPPORTED MIME TYPE') || errorStr.includes('INVALID_ARGUMENT') || msg.includes('INVALID_ARGUMENT')) {
+      return '지원하지 않는 언어나 파일 형식입니다. (DOC/DOCX는 지원하지 않습니다. PDF, TXT 또는 이미지를 첨부해주세요.)';
+    }
     return defaultMsg;
   };
 
@@ -628,7 +631,7 @@ const App: React.FC = () => {
                type="file"
                id="file-upload"
                multiple
-               accept=".pdf,.docx,.doc,.txt,image/*"
+               accept=".pdf,.txt,image/*"
                className="hidden"
                onChange={handleFileChange}
                disabled={loading}
@@ -640,7 +643,7 @@ const App: React.FC = () => {
                `}
              >
                <Paperclip size={16} />
-               참고자료 첨부 (제한 없음)
+               참고자료 첨부 (PDF, TXT, 이미지)
              </label>
              <span className="text-xs text-slate-400">
                {attachedFiles.length} files attached
