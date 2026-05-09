@@ -175,13 +175,16 @@ const App: React.FC = () => {
     const msg = (e.message || "").toUpperCase();
 
     if (errorStr.includes('429') || errorStr.includes('RESOURCE_EXHAUSTED') || msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED')) {
-      return 'API 호출량이 초과되었습니다. 1분 후 다시 시도해주세요.';
+      return 'API 호출량이 초과되었습니다. 잠시 후 다시 시도해주세요.';
     }
     if (errorStr.includes('SAFETY') || msg.includes('SAFETY')) {
-      return '입력 내용이 AI 안전 정책에 의해 차단되었습니다. 키워드를 변경해주세요.';
+      return '입력 내용이 AI 안전 정책에 의해 차단되었습니다. 키워드나 내용을 변경해주세요.';
     }
-    if (errorStr.includes('API_KEY_INVALID') || msg.includes('API_KEY_INVALID') || errorStr.includes('401') || msg.includes('401')) {
-      return '유효하지 않은 API 키입니다. 우측 상단 설정을 확인해주세요.';
+    if (errorStr.includes('API_KEY_INVALID') || msg.includes('API_KEY_INVALID') || errorStr.includes('401') || msg.includes('401') || errorStr.includes('PERMISSION_DENIED') || msg.includes('PERMISSION_DENIED') || errorStr.includes('403') || msg.includes('403')) {
+      return '유효하지 않은 API 키이거나 권한이 없습니다. 우측 상단 설정을 확인하여 올바른 API 키를 입력해주세요.';
+    }
+    if (errorStr.includes('NOT_FOUND') || msg.includes('NOT_FOUND') || errorStr.includes('404') || msg.includes('404')) {
+      return '해당 AI 모델을 사용할 수 없습니다. API 키의 권한을 확인하거나 관리자에게 문의하세요.';
     }
     if (errorStr.includes('TIMEOUT') || msg.includes('TIMEOUT')) {
       return '서버 응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.';
@@ -192,10 +195,14 @@ const App: React.FC = () => {
     if (errorStr.includes('FAILED TO FETCH') || msg.includes('FAILED TO FETCH') || errorStr.includes('NETWORK') || msg.includes('NETWORK')) {
       return '네트워크 연결 오류입니다. 인터넷 환경을 확인해주세요.';
     }
-    if (errorStr.includes('UNSUPPORTED MIME TYPE') || msg.includes('UNSUPPORTED MIME TYPE') || errorStr.includes('INVALID_ARGUMENT') || msg.includes('INVALID_ARGUMENT')) {
-      return '지원하지 않는 언어나 파일 형식입니다. (DOC/DOCX는 지원하지 않습니다. PDF, TXT 또는 이미지를 첨부해주세요.)';
+    if (errorStr.includes('UNSUPPORTED MIME TYPE') || msg.includes('UNSUPPORTED MIME TYPE') || errorStr.includes('INVALID_ARGUMENT') || msg.includes('INVALID_ARGUMENT') || errorStr.includes('400') || msg.includes('400')) {
+      // NOTE: INVALID_ARGUMENT usually means unsupported format or bad request payload.
+      return '잘못된 요청이거나 지원하지 않는 파일 형식입니다. (DOC/DOCX 등은 지원하지 않습니다. 다른 파일을 첨부해주세요.)';
     }
-    return defaultMsg;
+    
+    // If we land here, show the actual error message briefly so the user knows what's wrong.
+    const conciseMsg = (msg && msg !== "[OBJECT OBJECT]") ? msg.substring(0, 50) + "..." : errorStr.substring(0, 50) + "...";
+    return `${defaultMsg} (상세: ${conciseMsg})`;
   };
 
   // --- Step Handlers ---
@@ -210,6 +217,7 @@ const App: React.FC = () => {
       const topics = await geminiService.generateTopics(topicKeyword, attachedFiles);
       setTopicIdeas(topics);
     } catch (e: any) {
+      console.error("DEBUG Error in generateTopics:", e);
       setGlobalError(getFriendlyErrorMessage(e, '주제 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.'));
     } finally {
       setLoading(false);
