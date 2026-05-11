@@ -186,6 +186,9 @@ const App: React.FC = () => {
     if (errorStr.includes('NOT_FOUND') || msg.includes('NOT_FOUND') || errorStr.includes('404') || msg.includes('404')) {
       return '해당 AI 모델을 사용할 수 없습니다. API 키의 권한을 확인하거나 관리자에게 문의하세요.';
     }
+    if (errorStr.includes('503') || msg.includes('503') || errorStr.includes('OVERLOADED') || msg.includes('OVERLOADED') || errorStr.includes('UNAVAILABLE') || msg.includes('UNAVAILABLE')) {
+      return '현재 AI 서버에 트래픽이 몰려 서비스가 지연되고 있습니다. (모델 과부하) 잠시 후 다시 시도해주세요.';
+    }
     if (errorStr.includes('TIMEOUT') || msg.includes('TIMEOUT')) {
       return '서버 응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.';
     }

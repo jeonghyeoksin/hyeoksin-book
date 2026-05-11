@@ -18,6 +18,13 @@ const patchNotes: PatchNote[] = [
     ]
   },
   {
+    date: '2026-05-11',
+    version: 'v1.4.4',
+    changes: [
+      '구글 AI 서비스 과부하(503 에러) 발생 시 사용자가 이를 인지할 수 있도록 에러 메시지 처리 보강'
+    ]
+  },
+  {
     date: '2026-05-09',
     version: 'v1.4.3',
     changes: [
