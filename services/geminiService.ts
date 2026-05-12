@@ -79,17 +79,25 @@ const parseJSONFallback = (text: string, defaultOutput: any) => {
  */
 export const generateTopics = async (
   keyword: string, 
-  files: { data: string; mimeType: string }[] = []
+  files: { data: string; mimeType: string }[] = [],
+  authorExpertise: string = '',
+  bookStyle: string = ''
 ): Promise<{ title: string; description: string }[]> => {
   
   const systemPrompt = `
-    사용자가 입력한 키워드 "${keyword}"${files.length > 0 ? '와 첨부된 참고 자료' : ''}를 바탕으로 매력적인 전자책 주제 3가지를 제안해주세요.
+    사용자가 입력한 정보${files.length > 0 ? '와 첨부된 참고 자료' : ''}를 바탕으로 매력적인 전자책 주제 3가지를 제안해주세요.
     
+    [입력된 정보]
+    - 핵심 키워드: "${keyword}"
+    ${authorExpertise ? `- 저자의 전문성/배경: "${authorExpertise}"` : ''}
+    ${bookStyle ? `- 희망하는 전자책 스타일/형식: "${bookStyle}"` : ''}
+
     [필수 요구사항]
     1. 각 주제는 '제목'과 '설명'으로 구성되어야 합니다.
     2. **추천순(가장 매력적이고 시장성 있는 순서)으로 3가지를 제안해주세요.**
     3. **모든 제안된 주제의 '제목'에는 반드시 입력된 키워드 "${keyword}"가 포함되어야 합니다.**
     4. 첨부파일이 있다면 해당 파일의 내용(이미지, 텍스트 등)을 적극적으로 반영하여 주제를 선정해주세요.
+    5. 저자의 전문성이나 희망 스타일이 입력되었다면, 이를 최우선으로 반영하여 고품질의 주제를 도출해주세요.
     
     JSON 형식으로 출력해주세요.
   `;
@@ -159,7 +167,7 @@ export const suggestTargetAudience = async (title: string, description: string):
 /**
  * Generates a book outline (chapters).
  */
-export const generateOutline = async (title: string, audience: string, pageCount: string = 'AI추천'): Promise<string[]> => {
+export const generateOutline = async (title: string, audience: string, pageCount: string = 'AI추천', coreMessage: string = '', toneAndManner: string = ''): Promise<string[]> => {
   let pageInstruction = '';
   if (pageCount === 'AI추천') {
     pageInstruction = '주제에 가장 적합한 분량으로 체계적이고 논리적인 목차를 구성해주세요.';
@@ -170,6 +178,8 @@ export const generateOutline = async (title: string, audience: string, pageCount
   const prompt = `
     전자책 제목: "${title}"
     예상 독자: "${audience}"
+    ${coreMessage ? `핵심 메시지/목적: "${coreMessage}"` : ''}
+    ${toneAndManner ? `문체 및 어조: "${toneAndManner}"` : ''}
     
     이 전자책을 위한 체계적이고 논리적인 목차(챕터 제목)를 생성해주세요. 
     [분량 가이드] ${pageInstruction}
@@ -198,23 +208,32 @@ export const generateOutline = async (title: string, audience: string, pageCount
 /**
  * Generates content for a specific chapter.
  */
-export const generateChapterContent = async (bookTitle: string, chapterTitle: string, outline: string[], author: string = ''): Promise<string> => {
+export const generateChapterContent = async (bookTitle: string, chapterTitle: string, outline: string[], author: string = '', coreMessage: string = '', toneAndManner: string = ''): Promise<string> => {
   const prompt = `
     전자책 제목: ${bookTitle}
     ${author ? `저자: ${author}` : ''}
     전체 목차: ${outline.join(', ')}
+    ${coreMessage ? `핵심 메시지/목적: ${coreMessage}` : ''}
+    ${toneAndManner ? `문체 및 어조: ${toneAndManner}` : ''}
     
     현재 작성할 챕터: "${chapterTitle}"
     
     [작성 절대 원칙 - 필독]
-    1. **마크다운(Markdown) 문법 금지**: 텍스트에 '#', '*', '-', '>', '---', '[ ]' 등의 마크다운 특수기호를 절대 사용하지 마십시오.
-       - 제목이나 강조가 필요하다면 특수기호 대신 문맥과 줄바꿈으로 표현하세요.
-       - 오직 '줄바꿈(Enter)'으로만 문단을 구분하세요.
+    1. **형식 지침 (매우 중요 - 마크다운 금지 및 색상 태그 사용)**: 
+       - 텍스트에 '#', '*', '-', '>', '---', '[ ]' 등의 마크다운 특수기호를 절대 사용하지 마십시오.
+       - 대신, 내용 강조를 위해 아래와 같은 특수 태그를 **반드시** 사용하십시오:
+         [RED]빨간색으로 강조할 내용[/RED]
+         [BLUE]파란색으로 강조할 내용[/BLUE]
+         [GREEN]초록색으로 강조할 내용[/GREEN]
+         [YELLOW_BG]노란색 배경의 검은색 텍스트로 강조할 내용[/YELLOW_BG]
+       - 이 네 가지 강조 색상(빨강, 파랑, 초록, 노랑배경)을 본문 안에서 적절하게 섞어서 입체적이고 다채롭게 구성해 주세요.
+       - 문단 구분은 오직 '줄바꿈(Enter)'으로만 하세요.
     
-    2. **내용 전략 (브랜딩 & 셀링포인트)**:
+    2. **내용 전략 (브랜딩 & 셀링포인트 & 분위기)**:
        - 이 원고는 단순 정보 전달이 아닌, **저자("${author}")의 브랜딩**을 극대화하는 수단입니다.
        - 저자만의 독창적인 철학, 경험, 노하우를 깊이 있게 서술하여 독자가 저자를 업계의 권위자로 느끼게 하십시오.
-       - 저자가 제공하는 서비스나 핵심 가치(Selling Point)가 글 전반에 자연스럽게 녹아들어, 독자가 감동하고 행동(구매/문의 등)하고 싶게 만드십시오.
+       ${toneAndManner ? `- **반드시 다음 문체와 어조를 유지하여 작성하십시오:** ${toneAndManner}` : ''}
+       ${coreMessage ? `- **글의 핵심 목적 달성에 집중하십시오:** ${coreMessage}` : ''}
     
     3. **분량 및 스타일 (매우 중요)**:
        - 전체 책 분량(A4 50페이지 이상)을 위해, 이 챕터 하나만으로도 **A4 3~4페이지 분량(약 4000자 이상)**이 나오도록 아주 상세하고 길게 작성하십시오.

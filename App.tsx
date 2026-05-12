@@ -105,7 +105,11 @@ const App: React.FC = () => {
     targetAudience: '일반 대중',
     title: '',
     author: '',
+    authorExpertise: '',
+    bookStyle: '',
     pageCount: 'AI추천',
+    coreMessage: '',
+    toneAndManner: '',
     outline: [],
     chapters: [],
     generateIllustrations: false,
@@ -217,7 +221,7 @@ const App: React.FC = () => {
     setLoadingMessage('Gemini 3 Pro가 입력된 키워드와 자료를 분석하여 브레인스토밍 중입니다...');
     setSelectedTopicIdx(null);
     try {
-      const topics = await geminiService.generateTopics(topicKeyword, attachedFiles);
+      const topics = await geminiService.generateTopics(topicKeyword, attachedFiles, ebook.authorExpertise, ebook.bookStyle);
       setTopicIdeas(topics);
     } catch (e: any) {
       console.error("DEBUG Error in generateTopics:", e);
@@ -258,7 +262,7 @@ const App: React.FC = () => {
             }
             setLoadingMessage('Gemini가 최적의 주제를 브레인스토밍 중입니다...');
             setAutomationProgress(5);
-            const topics = await geminiService.generateTopics(topicKeyword, attachedFiles);
+            const topics = await geminiService.generateTopics(topicKeyword, attachedFiles, ebook.authorExpertise, ebook.bookStyle);
             if (topics.length === 0) throw new Error("주제 생성 실패");
             
             setTopicIdeas(topics);
@@ -304,7 +308,7 @@ const App: React.FC = () => {
             setLoadingMessage('Gemini가 체계적인 목차를 기획하고 있습니다...');
             setAutomationProgress(20);
             
-            const outline = await geminiService.generateOutline(localEbookState.title, localEbookState.targetAudience, localEbookState.pageCount);
+            const outline = await geminiService.generateOutline(localEbookState.title, localEbookState.targetAudience, localEbookState.pageCount, localEbookState.coreMessage, localEbookState.toneAndManner);
             localEbookState = {
                 ...localEbookState,
                 outline,
@@ -331,7 +335,9 @@ const App: React.FC = () => {
                     localEbookState.title,
                     writtenChapters[i].title,
                     localEbookState.outline,
-                    localEbookState.author
+                    localEbookState.author,
+                    localEbookState.coreMessage,
+                    localEbookState.toneAndManner
                 );
                 writtenChapters[i].content = content;
                 localEbookState = { ...localEbookState, chapters: [...writtenChapters] };
@@ -447,7 +453,7 @@ const App: React.FC = () => {
     setLoading(true);
     setLoadingMessage('Gemini가 책의 구조를 논리적으로 기획하고 있습니다 (Thinking)...');
     try {
-      const outline = await geminiService.generateOutline(titleToUse, audienceToUse, ebook.pageCount);
+      const outline = await geminiService.generateOutline(titleToUse, audienceToUse, ebook.pageCount, ebook.coreMessage, ebook.toneAndManner);
       setEbook(prev => ({ 
         ...prev, 
         outline,
@@ -477,7 +483,7 @@ const App: React.FC = () => {
     try {
       for (let i = 0; i < newChapters.length; i++) {
         setLoadingMessage(`'${newChapters[i].title}' 챕터 작성 중... (${i + 1}/${newChapters.length})`);
-        const content = await geminiService.generateChapterContent(ebook.title, newChapters[i].title, ebook.outline, ebook.author);
+        const content = await geminiService.generateChapterContent(ebook.title, newChapters[i].title, ebook.outline, ebook.author, ebook.coreMessage, ebook.toneAndManner);
         newChapters[i].content = content;
         setEbook(prev => ({ ...prev, chapters: [...newChapters] }));
         setWritingProgress(((i + 1) / newChapters.length) * 100);
@@ -579,7 +585,7 @@ const App: React.FC = () => {
       </div>
 
       <div className="max-w-2xl mx-auto space-y-6">
-        {/* Author Name Input */}
+        {/* Author Name and Page Count Input */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="relative">
             <label className="block text-sm font-medium text-slate-700 mb-1 ml-1">저자명</label>
@@ -613,6 +619,31 @@ const App: React.FC = () => {
               <option value="150">150페이지 내외</option>
               <option value="200">200페이지 내외</option>
             </select>
+          </div>
+        </div>
+
+        {/* Expertise and Style Options (For High-Quality) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="relative">
+            <label className="block text-sm font-medium text-slate-700 mb-1 ml-1">저자의 전문성/배경 (선택)</label>
+            <input 
+              type="text" 
+              value={ebook.authorExpertise}
+              onChange={(e) => setEbook(prev => ({...prev, authorExpertise: e.target.value}))}
+              placeholder="예: 10년차 현업 마케터, 요가 강사 등" 
+              className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-lg shadow-sm"
+            />
+          </div>
+
+          <div className="relative">
+            <label className="block text-sm font-medium text-slate-700 mb-1 ml-1">원하는 형식/스타일 (선택)</label>
+            <input 
+              type="text" 
+              value={ebook.bookStyle}
+              onChange={(e) => setEbook(prev => ({...prev, bookStyle: e.target.value}))}
+              placeholder="예: 노하우/실무서, 에세이, PDF 강의형 등" 
+              className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-lg shadow-sm"
+            />
           </div>
         </div>
 
@@ -810,6 +841,26 @@ const App: React.FC = () => {
                     className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-indigo-500 focus:border-indigo-500"
                 />
             </div>
+            <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">핵심 메시지/목적 (옵션)</label>
+                <input 
+                    type="text" 
+                    value={ebook.coreMessage} 
+                    onChange={(e) => setEbook({...ebook, coreMessage: e.target.value})}
+                    placeholder="예: 독자들에게 자신감을 심어주고 실질적인 해결책을 제시"
+                    className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+            </div>
+            <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">문체 및 어조 (옵션)</label>
+                <input 
+                    type="text" 
+                    value={ebook.toneAndManner} 
+                    onChange={(e) => setEbook({...ebook, toneAndManner: e.target.value})}
+                    placeholder="예: 전문가적이고 신뢰감 있는, 하지만 친근하고 읽기 쉬운 어조"
+                    className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+            </div>
         </div>
         <div className="mt-8 flex justify-end">
              {/* Note: This button remains for manual overrides if needed */}
@@ -981,6 +1032,27 @@ const App: React.FC = () => {
     </div>
   );
 
+  const renderFormattedContent = (text: string) => {
+      const parts = text.split(/(\[(?:RED|BLUE|GREEN|YELLOW_BG|IMPORTANT|EMPHASIS|HIGHLIGHT)\].*?\[\/(?:RED|BLUE|GREEN|YELLOW_BG|IMPORTANT|EMPHASIS|HIGHLIGHT)\])/g);
+      
+      return parts.map((part, index) => {
+          if (part.startsWith('[RED]') || part.startsWith('[IMPORTANT]')) {
+              const content = part.replace(/\[(RED|IMPORTANT)\]/g, '').replace(/\[\/(RED|IMPORTANT)\]/g, '');
+              return <span key={index} className="text-red-600 font-bold">{content}</span>;
+          } else if (part.startsWith('[BLUE]') || part.startsWith('[EMPHASIS]')) {
+              const content = part.replace(/\[(BLUE|EMPHASIS)\]/g, '').replace(/\[\/(BLUE|EMPHASIS)\]/g, '');
+              return <span key={index} className="text-blue-600 font-bold">{content}</span>;
+          } else if (part.startsWith('[GREEN]')) {
+              const content = part.replace(/\[GREEN\]/g, '').replace(/\[\/GREEN\]/g, '');
+              return <span key={index} className="text-green-600 font-bold">{content}</span>;
+          } else if (part.startsWith('[YELLOW_BG]') || part.startsWith('[HIGHLIGHT]')) {
+              const content = part.replace(/\[(YELLOW_BG|HIGHLIGHT)\]/g, '').replace(/\[\/(YELLOW_BG|HIGHLIGHT)\]/g, '');
+              return <span key={index} className="bg-yellow-200 text-slate-900 px-1 font-bold">{content}</span>;
+          }
+          return <span key={index}>{part}</span>;
+      });
+  };
+
   const renderReview = () => (
     <div className="space-y-8 animate-fade-in pb-20">
         <div className="flex items-center justify-between border-b border-slate-200 pb-6">
@@ -1039,7 +1111,7 @@ const App: React.FC = () => {
                         )}
 
                         <div className="mt-6 text-justify leading-relaxed whitespace-pre-wrap font-sans">
-                            {chapter.content}
+                            {renderFormattedContent(chapter.content)}
                         </div>
                     </article>
                 ))}

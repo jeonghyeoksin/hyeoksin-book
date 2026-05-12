@@ -11,7 +11,11 @@ export interface EBookState {
   targetAudience: string;
   title: string;
   author: string;
+  authorExpertise: string;
+  bookStyle: string; // Add bookStyle for topic selection
   pageCount: string; // "AI추천", "20", "30", "50", "100", "150", "200"
+  toneAndManner: string;
+  coreMessage: string;
   outline: string[];
   chapters: Chapter[];
   coverPrompt?: string;

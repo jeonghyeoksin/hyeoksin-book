@@ -119,9 +119,9 @@ export const generateAndDownloadDocx = async (ebook: EBookState) => {
         const text = p.trim();
         const children: TextRun[] = [];
         
-        // Regex to find our custom tags: [IMPORTANT], [EMPHASIS], [HIGHLIGHT]
+        // Regex to find our custom tags: [RED], [BLUE], [GREEN], [YELLOW_BG], or legacy [IMPORTANT], [EMPHASIS], [HIGHLIGHT]
         // We use a non-greedy match to handle multiple tags in one paragraph
-        const tagRegex = /\[(IMPORTANT|EMPHASIS|HIGHLIGHT)\](.*?)\[\/\1\]/g;
+        const tagRegex = /\[(RED|BLUE|GREEN|YELLOW_BG|IMPORTANT|EMPHASIS|HIGHLIGHT)\](.*?)\[\/\1\]/g;
         
         let lastIndex = 0;
         let match;
@@ -140,15 +140,19 @@ export const generateAndDownloadDocx = async (ebook: EBookState) => {
             
             const style: any = { text: content, size: 24 };
             
-            if (tagType === 'IMPORTANT') {
+            if (tagType === 'IMPORTANT' || tagType === 'RED') {
                 style.color = "FF0000"; // Red
                 style.bold = true;
-            } else if (tagType === 'EMPHASIS') {
+            } else if (tagType === 'EMPHASIS' || tagType === 'BLUE') {
                 style.color = "0000FF"; // Blue
                 style.bold = true;
-            } else if (tagType === 'HIGHLIGHT') {
+            } else if (tagType === 'GREEN') {
+                style.color = "008000"; // Green
+                style.bold = true;
+            } else if (tagType === 'HIGHLIGHT' || tagType === 'YELLOW_BG') {
+                style.color = "000000"; // Black text
                 style.shading = {
-                    fill: "FFFF00", // Yellow
+                    fill: "FFFF00", // Yellow background
                 };
             }
             
