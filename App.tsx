@@ -97,6 +97,8 @@ const App: React.FC = () => {
   // Inputs
   const [topicKeyword, setTopicKeyword] = useState('');
   const [topicIdeas, setTopicIdeas] = useState<GeneratedTopic[]>([]);
+  const [titleIdeas, setTitleIdeas] = useState<string[]>([]);
+  const [selectedTitleIdx, setSelectedTitleIdx] = useState<number | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   
   // E-Book State
@@ -114,6 +116,54 @@ const App: React.FC = () => {
     chapters: [],
     generateIllustrations: false,
   });
+
+  // Auto-save logic
+  useEffect(() => {
+    const savedState = localStorage.getItem('ebookState');
+    if (savedState) {
+      try {
+        const parsedState = JSON.parse(savedState);
+        if (parsedState.ebook) setEbook(parsedState.ebook);
+        if (parsedState.currentStep !== undefined) setCurrentStep(parsedState.currentStep);
+        if (parsedState.topicKeyword) setTopicKeyword(parsedState.topicKeyword);
+        if (parsedState.topicIdeas) setTopicIdeas(parsedState.topicIdeas);
+        if (parsedState.titleIdeas) setTitleIdeas(parsedState.titleIdeas);
+        if (parsedState.selectedTitleIdx !== undefined) setSelectedTitleIdx(parsedState.selectedTitleIdx);
+        if (parsedState.attachedFiles) setAttachedFiles(parsedState.attachedFiles);
+      } catch (e) {
+        console.error("Failed to parse saved state", e);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    const stateToSave = {
+      ebook,
+      currentStep,
+      topicKeyword,
+      topicIdeas,
+      titleIdeas,
+      selectedTitleIdx,
+      attachedFiles
+    };
+    try {
+        localStorage.setItem('ebookState', JSON.stringify(stateToSave));
+    } catch (error) {
+        if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+            console.warn("localStorage quota exceeded, clearing attachments or images to save data.");
+            // To save within quota, we can try to omit large data like attachments or images
+            stateToSave.attachedFiles = [];
+            // We could also remove generated images from the chapters, but for now we'll just omit attachments here as a fallback
+            try {
+                localStorage.setItem('ebookState', JSON.stringify(stateToSave));
+            } catch (innerError) {
+                console.error("Failed to save even after clearing attachments:", innerError);
+            }
+        } else {
+            console.error("Failed to save state:", error);
+        }
+    }
+  }, [ebook, currentStep, topicKeyword, topicIdeas, titleIdeas, selectedTitleIdx, attachedFiles]);
 
   // --- Helpers ---
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -289,6 +339,24 @@ const App: React.FC = () => {
             setEbook(localEbookState);
         }
 
+        
+        // --- PHASE 0.5: TITLE GENERATION ---
+        if (currentStep <= AppStep.TITLE_GENERATION) {
+            setCurrentStep(AppStep.TITLE_GENERATION);
+            setLoadingMessage('AI가 후킹성 있는 매력적인 제목을 생성하고 있습니다...');
+            setAutomationProgress(8);
+            
+            const titles = await geminiService.generateTitles(localEbookState.title, localEbookState.topic, localEbookState.authorExpertise, localEbookState.bookStyle);
+            if (titles && titles.length > 0) {
+               setTitleIdeas(titles);
+               localEbookState = { ...localEbookState, title: titles[0] }; // pick the first one
+               setSelectedTitleIdx(0);
+               setEbook(localEbookState);
+            }
+            setAutomationProgress(9);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+
         // --- PHASE 1: AUDIENCE SETTING ---
         if (currentStep <= AppStep.TOPIC_SELECTION) {
             setCurrentStep(AppStep.AUDIENCE_SETTING);
@@ -426,20 +494,49 @@ const App: React.FC = () => {
     }));
     setSelectedTopicIdx(idx);
     
-    // Automatically suggest audience when a topic is selected
+    // Now transition to TITLE_GENERATION
+    setTimeout(() => setCurrentStep(AppStep.TITLE_GENERATION), 500);
+  };
+
+  // --- Manual Handlers (Kept for manual retry capability) ---
+
+
+
+  const handleGenerateTitles = async () => {
+    if (!ebook.topic) return;
     setLoading(true);
-    setLoadingMessage('AI가 최적의 독자층을 분석하고 있습니다...');
+    setLoadingMessage('Gemini 3 Pro가 트렌디하고 매력적인 제목을 브레인스토밍 중입니다...');
+    setSelectedTitleIdx(null);
     try {
-      const suggestedAudience = await geminiService.suggestTargetAudience(topic.title, topic.description);
-      setEbook(prev => ({ ...prev, targetAudience: suggestedAudience }));
-    } catch (e) {
-      console.error(e);
+      const titles = await geminiService.generateTitles(ebook.title, ebook.topic, ebook.authorExpertise, ebook.bookStyle);
+      setTitleIdeas(titles);
+    } catch (e: any) {
+      console.error("Error generating titles:", e);
+      setGlobalError('제목 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
     } finally {
       setLoading(false);
     }
   };
 
-  // --- Manual Handlers (Kept for manual retry capability) ---
+  const selectTitle = (title: string, idx: number) => {
+     setEbook(prev => ({ ...prev, title }));
+     setSelectedTitleIdx(idx);
+     
+     // Auto suggest audience
+     setLoading(true);
+     setLoadingMessage('AI가 최적의 독자층을 분석하고 있습니다...');
+     geminiService.suggestTargetAudience(title, ebook.topic).then(res => {
+         setEbook(prev => ({ ...prev, targetAudience: res }));
+         setLoading(false);
+         // Move to audience setting
+         setTimeout(() => setCurrentStep(AppStep.AUDIENCE_SETTING), 300);
+     }).catch(e => {
+         console.error(e);
+         setLoading(false);
+         setTimeout(() => setCurrentStep(AppStep.AUDIENCE_SETTING), 300);
+     });
+  };
+
 
   const handleGenerateOutline = async (titleOverride?: string, audienceOverride?: string) => {
     const titleToUse = titleOverride || ebook.title;
@@ -766,6 +863,68 @@ const App: React.FC = () => {
     </div>
   );
 
+
+  const renderTitleGeneration = () => (
+    <div className="space-y-8 animate-fade-in">
+        <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
+            <h2 className="text-2xl font-bold text-slate-800 mb-2">제목 생성 (후킹성/매력)</h2>
+            <p className="text-slate-500 mb-6">주제를 기반으로 독자의 시선을 사로잡는 매력적인 제목을 제안합니다.</p>
+            
+            <div className="mb-8 p-6 bg-indigo-50 border border-indigo-100 rounded-xl">
+                <h3 className="font-bold text-indigo-900 mb-2">선택된 주제</h3>
+                <p className="text-indigo-800 font-medium whitespace-pre-wrap">{ebook.topic}</p>
+            </div>
+            
+            <div className="flex justify-center mb-8">
+               <button 
+                onClick={handleGenerateTitles}
+                disabled={loading}
+                className="px-8 py-4 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50"
+               >
+                 {loading ? <Loader2 className="animate-spin" size={20} /> : <Sparkles size={20} />}
+                 {titleIdeas.length > 0 ? "매력적인 제목 다시 생성하기" : "매력적인(후킹성) 제목 생성하기"}
+               </button>
+            </div>
+
+            {titleIdeas.length > 0 && (
+                <div className="grid md:grid-cols-1 gap-4">
+                <label className="block text-sm font-medium text-slate-700 mt-4 mb-2">원하는 제목을 선택하세요</label>
+                {titleIdeas.map((title, idx) => (
+                    <div key={idx} className={`relative bg-white p-6 rounded-2xl border transition-all cursor-pointer group flex items-center gap-4
+                        ${selectedTitleIdx === idx 
+                        ? 'border-indigo-500 shadow-xl ring-2 ring-indigo-500/20 bg-indigo-50/30' 
+                        : 'border-slate-200 shadow-sm hover:shadow-lg hover:border-indigo-300'
+                        }`}
+                        onClick={() => selectTitle(title, idx)}
+                    >
+                        <div className="flex-1">
+                            <h3 className="text-xl font-bold text-slate-800 group-hover:text-indigo-600">{title}</h3>
+                        </div>
+                        {selectedTitleIdx === idx && (
+                            <div className="text-indigo-600">
+                                <CheckCircle2 size={32} />
+                            </div>
+                        )}
+                    </div>
+                ))}
+                </div>
+            )}
+            
+            <div className="mt-8">
+                <label className="block text-sm font-medium text-slate-700 mb-2 ml-1">직접 제목 수정/입력</label>
+                <input 
+                    type="text" 
+                    value={ebook.title} 
+                    onChange={(e) => setEbook({...ebook, title: e.target.value})}
+                    placeholder="제목을 입력하거나 수정하세요"
+                    className="w-full px-4 py-4 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-lg shadow-sm"
+                />
+            </div>
+            
+        </div>
+    </div>
+  );
+
   const renderAudienceSetting = () => (
     <div className="space-y-8 animate-fade-in">
       <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
@@ -934,7 +1093,9 @@ const App: React.FC = () => {
             <div className="flex-1 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 w-full max-w-md mx-auto">
                 <div className={`aspect-[3/4] bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden border-2 border-dashed border-slate-300 relative ${loading ? 'animate-pulse' : ''}`}>
                     {ebook.coverImage ? (
-                        <img src={`data:image/png;base64,${ebook.coverImage}`} alt="Book Cover" className="w-full h-full object-cover" />
+                        <div className="relative w-full h-full group">
+                            <img src={`data:image/png;base64,${ebook.coverImage}`} alt="Book Cover" className="w-full h-full object-cover" />
+                        </div>
                     ) : (
                         <div className="text-center p-6 text-slate-400">
                             <BookOpen className="w-16 h-16 mx-auto mb-4 opacity-50" />
@@ -1140,6 +1301,10 @@ const App: React.FC = () => {
     const handleProceed = () => {
       switch(currentStep) {
         case AppStep.TOPIC_SELECTION:
+          if (ebook.topic) setCurrentStep(AppStep.TITLE_GENERATION);
+          else setGlobalError('주제를 먼저 선택해주세요.');
+          break;
+        case AppStep.TITLE_GENERATION:
           if (ebook.title) setCurrentStep(AppStep.AUDIENCE_SETTING);
           else setGlobalError('주제를 먼저 선택해주세요.');
           break;
@@ -1230,6 +1395,20 @@ const App: React.FC = () => {
 
   const renderHeaderRight = () => (
     <div className="flex items-center gap-4">
+      {/* Reset State Button */}
+      <button 
+        onClick={() => {
+            if(window.confirm('저장된 진행 상황을 초기화하고 처음부터 다시 시작하시겠습니까?')) {
+                localStorage.removeItem('ebookState');
+                window.location.reload();
+            }
+        }}
+        className="flex items-center gap-2 px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg font-semibold transition-colors text-sm border border-red-100"
+      >
+        <RefreshCw size={16} />
+        새로 만들기
+      </button>
+
       {/* Patch Note Button */}
       <button 
         onClick={() => setShowPatchNotes(true)}
@@ -1306,6 +1485,7 @@ const App: React.FC = () => {
       setIsSidebarOpen={setIsSidebarOpen}
     >
       {currentStep === AppStep.TOPIC_SELECTION && renderTopicSelection()}
+      {currentStep === AppStep.TITLE_GENERATION && renderTitleGeneration()}
       {currentStep === AppStep.AUDIENCE_SETTING && renderAudienceSetting()}
       {currentStep === AppStep.PLANNING && renderPlanning()}
       {currentStep === AppStep.WRITING && renderWriting()}

@@ -179,6 +179,29 @@ export const generateAndDownloadDocx = async (ebook: EBookState) => {
     });
   }
 
+  // --- ADD COPYRIGHT SECTION ---
+  const currentYear = new Date().getFullYear();
+  sections.push({
+      children: [
+          new Paragraph({
+              children: [new TextRun({ text: "저작권 및 면책 조항", bold: true, size: 32 })],
+              spacing: { before: 1000, after: 400 },
+          }),
+          new Paragraph({
+              children: [new TextRun({ text: `ⓒ ${currentYear}. ${ebook.author || '저자'}. All rights reserved.`, size: 20 })],
+              spacing: { after: 200 },
+          }),
+          new Paragraph({
+              children: [new TextRun({ text: "본 전자책의 모든 내용의 저작권은 저자에게 있습니다. 무단 전재 및 재배포, 복사를 엄격히 금지합니다.", size: 20 })],
+              spacing: { after: 200 },
+          }),
+          new Paragraph({
+              children: [new TextRun({ text: "본 저작물은 저작권법에 의해 보호를 받는 저작물이므로, 저작권자의 서면 동의 없는 내용의 일부 또는 전부의 무단 이용을 금지합니다.", size: 20 })],
+              spacing: { after: 200 },
+          }),
+      ]
+  });
+
   const doc = new Document({
     sections: sections.map(s => ({
         properties: s.properties || {},

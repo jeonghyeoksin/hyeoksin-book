@@ -26,12 +26,13 @@ export interface EBookState {
 export enum AppStep {
   DASHBOARD = 0,
   TOPIC_SELECTION = 1,
-  AUDIENCE_SETTING = 2,
-  PLANNING = 3,
-  WRITING = 4,
-  COVER_DESIGN = 5,
-  ILLUSTRATION = 6,
-  REVIEW_DOWNLOAD = 7,
+  TITLE_GENERATION = 2,
+  AUDIENCE_SETTING = 3,
+  PLANNING = 4,
+  WRITING = 5,
+  COVER_DESIGN = 6,
+  ILLUSTRATION = 7,
+  REVIEW_DOWNLOAD = 8,
 }
 
 export interface GeneratedTopic {

@@ -2,7 +2,7 @@ import { GoogleGenAI, Type, GenerateContentResponse, HarmCategory, HarmBlockThre
 
 // Model Constants
 const TEXT_MODEL = 'gemini-3.1-pro-preview';
-const IMAGE_MODEL = 'gemini-3.1-flash-image-preview';
+const IMAGE_MODEL = 'imagen-4.0-ultra-generate-001';
 
 const SAFETY_SETTINGS = [
   { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
@@ -140,6 +140,43 @@ export const generateTopics = async (
 };
 
 /**
+ * Generates catchy titles based on a topic.
+ */
+export const generateTitles = async (topicTitle: string, topicDescription: string, authorExpertise: string, bookStyle: string): Promise<string[]> => {
+  const prompt = `
+    다음 전자책 주제를 바탕으로 독자의 시선을 사로잡는(후킹성 있는) 매력적인 전자책 제목을 3가지 제안해주세요.
+
+    [주제 정보]
+    - 주제명: "${topicTitle}"
+    - 주제 설명: "${topicDescription}"
+    ${authorExpertise ? `- 저자의 전문성/배경: "${authorExpertise}"` : ''}
+    ${bookStyle ? `- 희망하는 전자책 스타일/형식: "${bookStyle}"` : ''}
+
+    [필수 요구사항]
+    1. 후킹성 있고 타겟 독자의 클릭을 유도할 수 있는 매력적이고 트렌디한 제목이어야 합니다.
+    2. 부제(Subtitle)를 포함하여 구성해도 좋습니다. (예: "메인 제목: 부제목")
+    3. JSON 배열 형식(Array of Strings)으로 3가지 제목만 반환해주세요.
+  `;
+
+  const ai = getAI();
+  const response = await callWithRetry(() => ai.models.generateContent({
+    model: TEXT_MODEL,
+    contents: prompt,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.ARRAY,
+        items: { type: Type.STRING },
+      },
+      thinkingConfig: { thinkingBudget: 1024 },
+      safetySettings: SAFETY_SETTINGS,
+    },
+  }));
+
+  return parseJSONFallback(response.text || "", []);
+};
+
+/**
  * Suggests a target audience based on the selected topic.
  */
 export const suggestTargetAudience = async (title: string, description: string): Promise<string> => {
@@ -239,8 +276,9 @@ export const generateChapterContent = async (bookTitle: string, chapterTitle: st
        - 전체 책 분량(A4 50페이지 이상)을 위해, 이 챕터 하나만으로도 **A4 3~4페이지 분량(약 4000자 이상)**이 나오도록 아주 상세하고 길게 작성하십시오.
        - 사례, 예시, 구체적인 방법론을 풍부하게 넣어 내용을 확장하세요.
     
-    4. **형식**: 완성된 산문 형태의 줄글로 작성하세요.
-    5. **가독성 최적화**: 독자가 읽기 편하도록 **두 문단(Paragraph)마다 반드시 한 줄의 빈 줄(Blank Line)**을 삽입하여 단락을 구분하십시오.
+    4. **제한 사항**: 본문의 내용에는 '혁신 전자책 AI' 또는 관련된 AI 서비스 이름(Gemini 등)을 절대 언급하지 마십시오. 오직 주제와 내용에 집중하세요.
+    5. **형식**: 완성된 산문 형태의 줄글로 작성하세요.
+    6. **가독성 최적화**: 독자가 읽기 편하도록 **두 문단(Paragraph)마다 반드시 한 줄의 빈 줄(Blank Line)**을 삽입하여 단락을 구분하십시오.
   `;
 
   const ai = getAI();
@@ -262,17 +300,17 @@ export const generateChapterContent = async (bookTitle: string, chapterTitle: st
  */
 export const generateImagePrompt = async (context: string, type: 'cover' | 'illustration'): Promise<string> => {
   const prompt = `
-    Create a highly detailed and artistic prompt in English for an AI image generator (Gemini 3 Pro Image).
+    Create a highly detailed and artistic prompt in English for an AI image generator (Gemini 3 Pro Image or Nanobanana 2).
     
     Context: ${context}
     Type: ${type === 'cover' ? 'Book Cover' : 'Book Illustration'}
     
     Style: ${type === 'cover' ? 'Minimalist, Modern, Eye-catching, High resolution, Typography friendly' : 'Digital Art, Storybook style, Clean lines'}
     
-    [CRITICAL INSTRUCTION FOR ALL IMAGES]
-    DO NOT include any text, typography, fonts, characters, letters, or words in the image.
-    The image must be purely visual art without any written elements, because AI image generators struggle with rendering Korean text correctly.
-    Even for the book cover, DO NOT add a title or author name to the image itself.
+    [CRITICAL INSTRUCTION]
+    ${type === 'cover' 
+      ? `You MUST instruct the image generator to explicitly render the title and author name in Korean as 100% accurate, high-quality text on the image. There must be no broken or hallucinated text. Specifically ask the image model to include the exact Korean Title and Author.`
+      : `DO NOT include any text, typography, fonts, characters, letters, or words in the image. The image must be purely visual art without any written elements.`}
     
     Output: Just the English prompt string.
   `;
@@ -290,39 +328,58 @@ export const generateImagePrompt = async (context: string, type: 'cover' | 'illu
 };
 
 /**
- * Generates an image using Gemini 3 Pro Image Preview.
+ * Generates an image using Gemini 3 Pro Image Preview or specified model.
  */
-export const generateImage = async (prompt: string, aspectRatio: '3:4' | '4:3' = '3:4'): Promise<string> => {
+export const generateImage = async (prompt: string, aspectRatio: '3:4' | '4:3' = '3:4', modelOverride?: string): Promise<string> => {
   try {
     const ai = getAI();
-    const response = await callWithRetry(() => ai.models.generateContent({
-      model: IMAGE_MODEL,
-      contents: {
-        parts: [{ text: prompt }],
-      },
-      config: {
-        imageConfig: {
+    const targetModel = modelOverride || IMAGE_MODEL;
+    
+    if (targetModel.includes('imagen')) {
+      const response = await callWithRetry(() => ai.models.generateImages({
+        model: targetModel,
+        prompt: prompt,
+        config: {
+          numberOfImages: 1,
           aspectRatio: aspectRatio,
-          imageSize: "1K"
-        },
-        safetySettings: SAFETY_SETTINGS,
+        }
+      }));
+      // @ts-ignore
+      if (response && response.generatedImages && response.generatedImages.length > 0) {
+        // @ts-ignore
+        return response.generatedImages[0].image.imageBytes;
       }
-    }));
+      return "";
+    } else {
+      const response = await callWithRetry(() => ai.models.generateContent({
+        model: targetModel,
+        contents: {
+          parts: [{ text: prompt }],
+        },
+        config: {
+          imageConfig: {
+            aspectRatio: aspectRatio,
+            imageSize: "1K"
+          },
+          safetySettings: SAFETY_SETTINGS,
+        }
+      }));
 
-    if (!response.candidates || response.candidates.length === 0) {
-      console.error("No candidates in image generation response");
+      if (!response.candidates || response.candidates.length === 0) {
+        console.error("No candidates in image generation response");
+        return "";
+      }
+
+      for (const part of response.candidates[0].content.parts || []) {
+        if (part.inlineData && part.inlineData.data) {
+          return part.inlineData.data;
+        }
+      }
+      console.warn("No inlineData found in image generation parts");
       return "";
     }
-
-    for (const part of response.candidates[0].content.parts || []) {
-      if (part.inlineData && part.inlineData.data) {
-        return part.inlineData.data;
-      }
-    }
-    console.warn("No inlineData found in image generation parts");
-    return "";
   } catch (error) {
-    console.error("Image generation failed:", error);
+    console.error("Image generation failed:", JSON.stringify(error));
     return "";
   }
 };
