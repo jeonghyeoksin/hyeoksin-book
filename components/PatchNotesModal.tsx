@@ -18,6 +18,20 @@ const patchNotes: PatchNote[] = [
     ]
   },
   {
+    date: '2026-05-24',
+    version: 'v1.5.0',
+    changes: [
+      '이미지 생성 모델 장애/과부하 발생 시, 고화질 보조 이미징 모델들(Imagen 3, Gemini 3.1, Gemini 2.5)로 순차적 자동 전환(Fallback Queue)하여 503 오류를 완전 차단하고 무중단 표지/삽화 생성을 보장하는 지능형 대체 인프라 도입'
+    ]
+  },
+  {
+    date: '2026-05-12',
+    version: 'v1.4.10',
+    changes: [
+      '전자책 표지 이미지 생성 시, 지정된 전자책 제목과 저자 텍스트가 강제로 포함되도록 AI 이미지 프롬프트 최적화 적용'
+    ]
+  },
+  {
     date: '2026-05-12',
     version: 'v1.4.9',
     changes: [
