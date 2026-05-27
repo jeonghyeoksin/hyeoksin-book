@@ -309,7 +309,7 @@ export const generateImagePrompt = async (context: string, type: 'cover' | 'illu
     
     [CRITICAL INSTRUCTION]
     ${type === 'cover' 
-      ? `You MUST extract the Exact Title and Author from the Context. Your final prompt MUST explicitly include them in quotes. For example include: "A book cover design prominently featuring the exact Korean text \\"Title\\" and \\"Author\\". The text overlay must be prominent, perfectly spelled, and beautifully integrated into the typography." Do not use generic placeholders, you MUST use the exact Korean text from the context in the final English prompt.`
+      ? `The generated image MUST be a purely visual art piece, painting, photograph, or illustration suited as a premium book cover. It MUST NOT contain any text, letters, titles, words, fonts, typography, characters, or symbols of any language. Keep the composition clean, balanced, and with atmospheric spaces suitable for having title texts overlaid programmatically later. Do not draw any text.`
       : `DO NOT include any text, typography, fonts, characters, letters, or words in the image. The image must be purely visual art without any written elements.`}
     
     Output: Just the English prompt string.

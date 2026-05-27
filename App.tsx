@@ -3,6 +3,7 @@ import { Layout } from './components/Layout';
 import { AppStep, EBookState, GeneratedTopic, Chapter } from './types';
 import * as geminiService from './services/geminiService';
 import { generateAndDownloadDocx } from './utils/docxGenerator';
+import { overlayTextOnCover } from './utils/coverGenerator';
 import { 
   ArrowRight, 
   Sparkles, 
@@ -428,8 +429,16 @@ const App: React.FC = () => {
             
             setLoadingMessage('표지 이미지를 렌더링 중입니다...');
             setAutomationProgress(85);
-            const coverImage = await geminiService.generateImage(coverPrompt, '3:4');
+            let coverImage = await geminiService.generateImage(coverPrompt, '3:4');
             if (!coverImage) throw new Error("표지 이미지 생성 실패");
+            
+            setLoadingMessage('표지에 한국어 타이틀과 저자 정보를 선명하게 디자인 중입니다...');
+            try {
+                const composited = await overlayTextOnCover(coverImage, localEbookState.title, authorToUse);
+                coverImage = composited;
+            } catch (overlayErr) {
+                console.error("Failed to apply text overlay onto cover background:", overlayErr);
+            }
             
             localEbookState = { ...localEbookState, coverPrompt, coverImage };
             setEbook(localEbookState);
@@ -600,7 +609,17 @@ const App: React.FC = () => {
       const prompt = await geminiService.generateImagePrompt(`Title: ${ebook.title}, Topic: ${ebook.topic}, Author: ${authorToUse}`, 'cover');
       setEbook(prev => ({ ...prev, coverPrompt: prompt }));
       
-      const base64Image = await geminiService.generateImage(prompt, '3:4');
+      let base64Image = await geminiService.generateImage(prompt, '3:4');
+      if (!base64Image) throw new Error("표지 이미지 생성 실패");
+
+      setLoadingMessage('표지에 한국어 타이틀과 저자 정보를 선명하게 디자인 중입니다...');
+      try {
+        const composited = await overlayTextOnCover(base64Image, ebook.title, authorToUse);
+        base64Image = composited;
+      } catch (overlayErr) {
+        console.error("Failed to apply text overlay onto cover background:", overlayErr);
+      }
+
       setEbook(prev => ({ ...prev, coverImage: base64Image }));
     } catch (e) {
       console.error(e);
