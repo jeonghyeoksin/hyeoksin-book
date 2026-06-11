@@ -26,7 +26,8 @@ import {
   Eye,
   EyeOff,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Copy
 } from 'lucide-react';
 import { ApiCostModal } from './components/ApiCostModal';
 import { PatchNotesModal } from './components/PatchNotesModal';
@@ -42,8 +43,9 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
   const [hasApiKey, setHasApiKey] = useState(false);
-  const [customApiKey, setCustomApiKey] = useState('');
   const [apiKeyInput, setApiKeyInput] = useState('');
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [apiKeyStatus, setApiKeyStatus] = useState<'idle' | 'saving' | 'saved' | 'cleared' | 'error'>('idle');
   const [showHowToUse, setShowHowToUse] = useState(false);
   const [showApiCost, setShowApiCost] = useState(false);
   const [showPatchNotes, setShowPatchNotes] = useState(false);
@@ -51,13 +53,11 @@ const App: React.FC = () => {
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [automationProgress, setAutomationProgress] = useState(0);
   const [isAutomating, setIsAutomating] = useState(false);
-  const [showApiKey, setShowApiKey] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   const checkKey = async () => {
     const storedKey = localStorage.getItem('custom_gemini_api_key');
     if (storedKey) {
-      setCustomApiKey(storedKey);
       setApiKeyInput(storedKey);
       setHasApiKey(true);
       return;
@@ -78,20 +78,38 @@ const App: React.FC = () => {
     if ((window as any).aistudio) {
       await (window as any).aistudio.openSelectKey();
       setHasApiKey(true);
+      if (globalError && (globalError.includes("API 호출량") || globalError.includes("API 키") || globalError.includes("Quota") || globalError.includes("EXHAUSTED"))) {
+        setGlobalError(null);
+      }
     }
   };
 
   const handleSaveApiKey = async () => {
-    if (apiKeyInput.trim()) {
-      localStorage.setItem('custom_gemini_api_key', apiKeyInput.trim());
-      setCustomApiKey(apiKeyInput.trim());
+    setApiKeyStatus('saving');
+    await new Promise(r => setTimeout(r, 400));
+
+    const cleanKey = apiKeyInput.replace(/[\r\n\s]+/g, '');
+
+    if (cleanKey) {
+      if (!cleanKey.startsWith('AIza') || cleanKey.length < 35) {
+        setApiKeyStatus('error');
+        setGlobalError('올바른 Gemini API 키 형식이 아닙니다 (일반적으로 AIza... 로 시작하는 39자리 문자열입니다)');
+        setTimeout(() => setApiKeyStatus('idle'), 2500);
+        return;
+      }
+      localStorage.setItem('custom_gemini_api_key', cleanKey);
       setHasApiKey(true);
-      setGlobalError('API 키가 적용되었습니다.');
+      setApiKeyStatus('saved');
+      
+      if (globalError && (globalError.includes("API 호출량") || globalError.includes("API 키") || globalError.includes("Quota") || globalError.includes("EXHAUSTED"))) {
+        setGlobalError(null); // Auto close error modal if they fixed it
+      }
+      setTimeout(() => setApiKeyStatus('idle'), 2500);
     } else {
       localStorage.removeItem('custom_gemini_api_key');
-      setCustomApiKey('');
       await checkKey();
-      setGlobalError('API 키가 삭제되었습니다.');
+      setApiKeyStatus('cleared');
+      setTimeout(() => setApiKeyStatus('idle'), 2500);
     }
   };
   
@@ -222,15 +240,46 @@ const App: React.FC = () => {
     setAttachedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-
   // --- Error Handling Helper ---
   const getFriendlyErrorMessage = (e: any, defaultMsg: string) => {
     console.error("Operation Error:", e);
-    const errorStr = JSON.stringify(e).toUpperCase();
-    const msg = (e.message || "").toUpperCase();
+    let errorStr = "";
+    try {
+      errorStr = JSON.stringify(e, Object.getOwnPropertyNames(e)).toUpperCase();
+    } catch {
+      errorStr = String(e).toUpperCase();
+    }
+    
+    let msg = "";
+    if (e && typeof e === 'object') {
+      const parts = [
+        e.message,
+        e.status,
+        e.code,
+        e.error?.message,
+        e.error?.status,
+        e.error?.code,
+        e.statusText
+      ];
+      msg = parts.filter(Boolean).map(x => String(x).toUpperCase()).join(" | ");
+    } else {
+      msg = String(e).toUpperCase();
+    }
 
-    if (errorStr.includes('429') || errorStr.includes('RESOURCE_EXHAUSTED') || msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED')) {
-      return 'API 호출량이 초과되었습니다. 잠시 후 다시 시도해주세요.';
+    const isQuotaError = errorStr.includes('QUOTA') || 
+                         msg.includes('QUOTA') || 
+                         errorStr.includes('EXCEEDED YOUR CURRENT QUOTA') || 
+                         msg.includes('EXCEEDED YOUR CURRENT QUOTA') ||
+                         errorStr.includes('BILLING') ||
+                         msg.includes('BILLING');
+
+    const isRateLimit = errorStr.includes('429') || 
+                        errorStr.includes('RESOURCE_EXHAUSTED') || 
+                        msg.includes('429') || 
+                        msg.includes('RESOURCE_EXHAUSTED');
+
+    if (isQuotaError || isRateLimit) {
+      return 'API 호출량(Quota) 한도가 초과되었거나 결제 등록이 필요합니다. 계속 생성하려면 우측 상단 [설정 API Key] 메뉴에서 본인의 개별 Gemini API Key를 입력해주시기 바랍니다. (개별 API 키는 매달 무료 제공 호출 한도가 있어 훨씬 매끄러운 진행이 가능합니다.)';
     }
     if (errorStr.includes('SAFETY') || msg.includes('SAFETY')) {
       return '입력 내용이 AI 안전 정책에 의해 차단되었습니다. 키워드나 내용을 변경해주세요.';
@@ -254,12 +303,10 @@ const App: React.FC = () => {
       return '네트워크 연결 오류입니다. 인터넷 환경을 확인해주세요.';
     }
     if (errorStr.includes('UNSUPPORTED MIME TYPE') || msg.includes('UNSUPPORTED MIME TYPE') || errorStr.includes('INVALID_ARGUMENT') || msg.includes('INVALID_ARGUMENT') || errorStr.includes('400') || msg.includes('400')) {
-      // NOTE: INVALID_ARGUMENT usually means unsupported format or bad request payload.
       return '잘못된 요청이거나 지원하지 않는 파일 형식입니다. (DOC/DOCX 등은 지원하지 않습니다. 다른 파일을 첨부해주세요.)';
     }
     
-    // If we land here, show the actual error message briefly so the user knows what's wrong.
-    const conciseMsg = (msg && msg !== "[OBJECT OBJECT]") ? msg.substring(0, 50) + "..." : errorStr.substring(0, 50) + "...";
+    const conciseMsg = (msg && msg !== "[OBJECT OBJECT]") ? msg.substring(0, 70) + "..." : errorStr.substring(0, 70) + "...";
     return `${defaultMsg} (상세: ${conciseMsg})`;
   };
 
@@ -377,7 +424,7 @@ const App: React.FC = () => {
             setLoadingMessage('Gemini가 체계적인 목차를 기획하고 있습니다...');
             setAutomationProgress(20);
             
-            const outline = await geminiService.generateOutline(localEbookState.title, localEbookState.targetAudience, localEbookState.pageCount, localEbookState.coreMessage, localEbookState.toneAndManner);
+            const outline = await geminiService.generateOutline(localEbookState.title, localEbookState.targetAudience, localEbookState.pageCount, localEbookState.coreMessage, localEbookState.toneAndManner, localEbookState.referenceContent);
             localEbookState = {
                 ...localEbookState,
                 outline,
@@ -406,7 +453,8 @@ const App: React.FC = () => {
                     localEbookState.outline,
                     localEbookState.author,
                     localEbookState.coreMessage,
-                    localEbookState.toneAndManner
+                    localEbookState.toneAndManner,
+                    localEbookState.referenceContent
                 );
                 writtenChapters[i].content = content;
                 localEbookState = { ...localEbookState, chapters: [...writtenChapters] };
@@ -430,7 +478,6 @@ const App: React.FC = () => {
             setLoadingMessage('표지 이미지를 렌더링 중입니다...');
             setAutomationProgress(85);
             let coverImage = await geminiService.generateImage(coverPrompt, '3:4');
-            if (!coverImage) throw new Error("표지 이미지 생성 실패");
             
             setLoadingMessage('표지에 한국어 타이틀과 저자 정보를 선명하게 디자인 중입니다...');
             try {
@@ -559,7 +606,7 @@ const App: React.FC = () => {
     setLoading(true);
     setLoadingMessage('Gemini가 책의 구조를 논리적으로 기획하고 있습니다 (Thinking)...');
     try {
-      const outline = await geminiService.generateOutline(titleToUse, audienceToUse, ebook.pageCount, ebook.coreMessage, ebook.toneAndManner);
+      const outline = await geminiService.generateOutline(titleToUse, audienceToUse, ebook.pageCount, ebook.coreMessage, ebook.toneAndManner, ebook.referenceContent);
       setEbook(prev => ({ 
         ...prev, 
         outline,
@@ -589,7 +636,7 @@ const App: React.FC = () => {
     try {
       for (let i = 0; i < newChapters.length; i++) {
         setLoadingMessage(`'${newChapters[i].title}' 챕터 작성 중... (${i + 1}/${newChapters.length})`);
-        const content = await geminiService.generateChapterContent(ebook.title, newChapters[i].title, ebook.outline, ebook.author, ebook.coreMessage, ebook.toneAndManner);
+        const content = await geminiService.generateChapterContent(ebook.title, newChapters[i].title, ebook.outline, ebook.author, ebook.coreMessage, ebook.toneAndManner, ebook.referenceContent);
         newChapters[i].content = content;
         setEbook(prev => ({ ...prev, chapters: [...newChapters] }));
         setWritingProgress(((i + 1) / newChapters.length) * 100);
@@ -610,7 +657,6 @@ const App: React.FC = () => {
       setEbook(prev => ({ ...prev, coverPrompt: prompt }));
       
       let base64Image = await geminiService.generateImage(prompt, '3:4');
-      if (!base64Image) throw new Error("표지 이미지 생성 실패");
 
       setLoadingMessage('표지에 한국어 타이틀과 저자 정보를 선명하게 디자인 중입니다...');
       try {
@@ -761,6 +807,17 @@ const App: React.FC = () => {
               className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-lg shadow-sm"
             />
           </div>
+        </div>
+
+        {/* Reference Content Field */}
+        <div className="relative mt-2">
+          <label className="block text-sm font-medium text-slate-700 mb-1 ml-1">참고 내용 작성 (선택 - 입력시 전자책 결과물에 필수 반영됨)</label>
+          <textarea 
+            value={ebook.referenceContent || ''}
+            onChange={(e) => setEbook(prev => ({...prev, referenceContent: e.target.value}))}
+            placeholder="전자책 내용에 꼭 포함되어야 할 구체적인 참고 내용, 사례, 혹은 필수 메시지를 자유롭게 작성해주세요." 
+            className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none min-h-[100px] text-base shadow-sm resize-y"
+          />
         </div>
 
         {/* Keyword Input */}
@@ -1233,20 +1290,83 @@ const App: React.FC = () => {
       });
   };
 
+  const formatContentForHtml = (text: string) => {
+      let html = text
+          .replace(/</g, '&lt;').replace(/>/g, '&gt;') // escape HTML
+          .replace(/\n\n/g, '</p><p>')
+          .replace(/\n/g, '<br/>');
+          
+      html = html.replace(/\[(RED|IMPORTANT)\](.*?)\[\/\1\]/g, '<span style="color:#dc2626; font-weight:bold;">$2</span>');
+      html = html.replace(/\[(BLUE|EMPHASIS)\](.*?)\[\/\1\]/g, '<span style="color:#2563eb; font-weight:bold;">$2</span>');
+      html = html.replace(/\[GREEN\](.*?)\[\/GREEN\]/g, '<span style="color:#16a34a; font-weight:bold;">$1</span>');
+      html = html.replace(/\[(YELLOW_BG|HIGHLIGHT)\](.*?)\[\/\1\]/g, '<span style="background-color:#fef08a; font-weight:bold; color:black;">$2</span>');
+      
+      return `<p>${html}</p>`;
+  };
+
+  const handleCopyToDocs = async () => {
+      setLoading(true);
+      try {
+          let htmlContent = `<div style="font-family: Arial, sans-serif;">`;
+          htmlContent += `<h1 style="text-align: center; font-size: 36px; margin-bottom: 10px;">${ebook.title}</h1>`;
+          if (ebook.author) htmlContent += `<p style="text-align: center; font-size: 18px; color: #555;">저자: ${ebook.author}</p>`;
+          if (ebook.coverImage) htmlContent += `<div style="text-align: center; margin: 20px 0;"><img src="data:image/png;base64,${ebook.coverImage}" style="max-width: 400px;" /></div>`;
+          
+          htmlContent += `<h2 style="font-size: 24px; margin-top: 40px; border-bottom: 1px solid #ccc; padding-bottom: 10px;">목차</h2>`;
+          htmlContent += `<ul>`;
+          ebook.outline.forEach(ch => { htmlContent += `<li><strong>${ch}</strong></li>`; });
+          htmlContent += `</ul>`;
+          htmlContent += `<hr style="margin: 40px 0;" />`;
+
+          ebook.chapters.forEach((chapter, idx) => {
+              htmlContent += `<h2 style="font-size: 24px; color: #333; margin-top: 40px;">${idx + 1}. ${chapter.title}</h2>`;
+              if (chapter.imageData) {
+                  htmlContent += `<div style="text-align: center; margin: 20px 0;"><img src="data:image/png;base64,${chapter.imageData}" style="max-width: 600px;" /></div>`;
+              }
+              htmlContent += `<div style="line-height: 1.6; font-size: 16px; color: #333; text-align: justify;">${formatContentForHtml(chapter.content)}</div>`;
+              htmlContent += `<hr style="margin: 40px 0;" />`;
+          });
+          
+          htmlContent += `</div>`;
+
+          const blobHtml = new Blob([htmlContent], { type: 'text/html' });
+          const blobText = new Blob([ebook.title + '\n(웹 브라우저의 HTML 복사 기능을 사용해주세요)'], { type: 'text/plain' });
+          const data = [new ClipboardItem({ 'text/html': blobHtml, 'text/plain': blobText })];
+          
+          await navigator.clipboard.write(data);
+          alert('웹 문서용 원문(HTML)이 클립보드에 복사되었습니다. 구글 문서(Docs)나 워드 등에 붙여넣기 해보세요.');
+      } catch (err) {
+          console.error('Copy failed:', err);
+          alert('클립보드 복사에 실패했습니다.');
+      } finally {
+          setLoading(false);
+      }
+  };
+
   const renderReview = () => (
     <div className="space-y-8 animate-fade-in pb-20">
         <div className="flex items-center justify-between border-b border-slate-200 pb-6">
             <div>
                 <h2 className="text-3xl font-bold text-slate-800">최종 검토 및 다운로드</h2>
-                <p className="text-slate-500 mt-1">완성된 전자책을 확인하고 DOCX 파일로 저장하세요.</p>
+                <p className="text-slate-500 mt-1">완성된 전자책을 확인하고 DOCX 파일로 저장하거나 Docs로 복사하세요.</p>
             </div>
-            <button 
-                onClick={handleDownload}
-                className="flex items-center gap-2 px-6 py-3 bg-indigo-700 text-white rounded-xl font-bold hover:bg-indigo-800 shadow-lg transition-transform active:scale-95"
-            >
-                <Download size={20} />
-                DOCX 다운로드
-            </button>
+            <div className="flex items-center gap-3">
+                <button 
+                    onClick={handleCopyToDocs}
+                    disabled={loading}
+                    className="flex items-center gap-2 px-6 py-3 bg-white text-indigo-700 border-2 border-indigo-700 rounded-xl font-bold hover:bg-indigo-50 shadow-sm transition-transform active:scale-95 disabled:opacity-50"
+                >
+                    {loading ? <Loader2 className="animate-spin w-5 h-5" /> : <Copy size={20} />}
+                    Docs로 복사하기
+                </button>
+                <button 
+                    onClick={handleDownload}
+                    className="flex items-center gap-2 px-6 py-3 bg-indigo-700 text-white rounded-xl font-bold hover:bg-indigo-800 shadow-lg transition-transform active:scale-95"
+                >
+                    <Download size={20} />
+                    DOCX 다운로드
+                </button>
+            </div>
         </div>
 
         <div className="bg-white shadow-xl rounded-xl overflow-hidden border border-slate-200 max-w-4xl mx-auto min-h-[800px]">
@@ -1485,9 +1605,18 @@ const App: React.FC = () => {
           </div>
           <button 
             onClick={handleSaveApiKey}
-            className="px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 transition-colors"
+            disabled={apiKeyStatus === 'saving'}
+            className={`px-4 py-1.5 text-white rounded-lg text-sm font-bold transition-colors flex items-center justify-center min-w-[70px] ${
+              apiKeyStatus === 'saved' ? 'bg-green-600 hover:bg-green-700' :
+              apiKeyStatus === 'cleared' ? 'bg-slate-600 hover:bg-slate-700' :
+              apiKeyStatus === 'error' ? 'bg-red-600 hover:bg-red-700' :
+              'bg-indigo-600 hover:bg-indigo-700'
+            }`}
           >
-            적용
+            {apiKeyStatus === 'saving' ? <Loader2 size={16} className="animate-spin" /> : 
+             apiKeyStatus === 'saved' ? <span className="flex items-center gap-1"><CheckCircle2 size={14} /> 적용됨</span> : 
+             apiKeyStatus === 'cleared' ? '해제됨' :
+             (!apiKeyInput.trim() ? '해제' : '적용')}
           </button>
         </div>
       </div>
@@ -1601,7 +1730,11 @@ const App: React.FC = () => {
       {/* Global Error Modal */}
       {globalError && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full animate-scale-in overflow-hidden">
+          <div className={`bg-white rounded-3xl shadow-2xl w-full animate-scale-in overflow-hidden transition-all ${
+            (globalError.includes("API 호출량") || globalError.includes("API 키") || globalError.includes("Quota") || globalError.includes("EXHAUSTED") || globalError.includes("RESOURCE")) 
+              ? 'max-w-md' 
+              : 'max-w-sm'
+          }`}>
             <div className="p-6 bg-indigo-50 border-b border-indigo-100 flex items-center justify-between">
               <h3 className="text-xl font-bold text-indigo-900 flex items-center gap-2">
                 알림
@@ -1610,15 +1743,47 @@ const App: React.FC = () => {
                 <X size={20} className="text-indigo-900" />
               </button>
             </div>
-            <div className="p-8 text-slate-700">
-              <p className="mb-4 font-medium leading-relaxed">{globalError}</p>
+            <div className="p-8 text-slate-700 space-y-4">
+              <p className="font-medium leading-relaxed">{globalError}</p>
+              
+              {/* If it's a quota or API Key error, show a dedicated input here */}
+              {(globalError.includes("API 호출량") || globalError.includes("API 키") || globalError.includes("Quota") || globalError.includes("EXHAUSTED") || globalError.includes("RESOURCE")) && (
+                <div className="mt-4 p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100 space-y-3">
+                  <div className="text-xs font-bold text-indigo-900">내 개별 Gemini API Key 입력:</div>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text"
+                      value={apiKeyInput}
+                      onChange={(e) => setApiKeyInput(e.target.value)}
+                      placeholder="AI Studio에서 발급받은 API 키 붙여넣기"
+                      className="flex-1 px-3 py-2 bg-white rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                    <button
+                      onClick={handleSaveApiKey}
+                      disabled={apiKeyStatus === 'saving'}
+                      className={`px-4 py-2 text-white rounded-xl text-sm font-bold transition-colors whitespace-nowrap min-w-[80px] flex items-center justify-center ${
+                        apiKeyStatus === 'saved' ? 'bg-green-600 hover:bg-green-700' :
+                        apiKeyStatus === 'error' ? 'bg-red-600 hover:bg-red-700' :
+                        'bg-indigo-600 hover:bg-indigo-700 animate-pulse'
+                      }`}
+                    >
+                      {apiKeyStatus === 'saving' ? <Loader2 size={16} className="animate-spin" /> : 
+                       apiKeyStatus === 'saved' ? <span className="flex items-center gap-1"><CheckCircle2 size={16} /> 적용됨</span> : 
+                       '적용'}
+                    </button>
+                  </div>
+                  <div className="text-[11px] text-slate-500 leading-normal">
+                    * <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-indigo-600 underline font-semibold">여기(Google AI Studio)</a>에서 무료로 API 키를 즉시 발급받으실 수 있으며, 이 곳이나 우측 상단 바에서 입력하시면 리소스 소진 없이 전자책을 무제한으로 작성하실 수 있습니다.
+                  </div>
+                </div>
+              )}
             </div>
             <div className="p-6 bg-slate-50 flex justify-end">
               <button 
                 onClick={() => setGlobalError(null)}
                 className="px-6 py-2 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 w-full"
               >
-                확인
+                닫기
               </button>
             </div>
           </div>

@@ -4,9 +4,47 @@
  */
 export const overlayTextOnCover = (base64Image: string, title: string, author: string): Promise<string> => {
   return new Promise((resolve, reject) => {
+    // If we have no image due to API quota, just draw a nice clean gradient background!
+    if (!base64Image || base64Image.trim() === '') {
+      try {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject(new Error("Could not get canvas context"));
+        const width = 768;
+        const height = 1024;
+        canvas.width = width;
+        canvas.height = height;
+
+        // Draw an elegant dark slate gradient fallback background
+        const bgGrad = ctx.createLinearGradient(0, 0, width, height);
+        bgGrad.addColorStop(0, '#1e1b4b'); // indigo-950
+        bgGrad.addColorStop(1, '#0f172a'); // slate-900
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(0, 0, width, height);
+
+        // Add some abstract shapes to make it less boring
+        ctx.beginPath();
+        ctx.arc(width * 0.8, height * 0.2, width * 0.4, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(79, 70, 229, 0.1)';
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(width * 0.2, height * 0.8, width * 0.5, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.4)';
+        ctx.fill();
+
+        // Proceed to text overlay logic
+        drawTextOverlay(ctx, width, height, title, author);
+        const finalBase64 = canvas.toDataURL('image/png').replace(/^data:image\/(png|jpg|jpeg);base64,/, "");
+        resolve(finalBase64);
+      } catch (e) {
+        reject(e);
+      }
+      return;
+    }
+
     const img = new Image();
     
-    // Process input data
     const imgSrc = base64Image.startsWith('data:') 
       ? base64Image 
       : `data:image/png;base64,${base64Image}`;
@@ -22,15 +60,50 @@ export const overlayTextOnCover = (base64Image: string, title: string, author: s
           return;
         }
 
-        // Use natural dimensions of the generated image to preserve maximum quality.
-        // Usually, 768x1024 or higher is used.
         const width = img.naturalWidth || 768;
         const height = img.naturalHeight || 1024;
         canvas.width = width;
         canvas.height = height;
 
-        // Draw the background artwork
         ctx.drawImage(img, 0, 0, width, height);
+        
+        drawTextOverlay(ctx, width, height, title, author);
+
+        const dataUrl = canvas.toDataURL('image/png');
+        const finalBase64 = dataUrl.replace(/^data:image\/(png|jpg|jpeg);base64,/, "");
+        
+        resolve(finalBase64);
+      } catch (err) {
+        reject(err);
+      }
+    };
+
+    img.onerror = (e) => {
+      // If the image failed to load but exists, try to recover with gradient
+      try {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject(new Error("Could not get canvas context"));
+        const width = 768;
+        const height = 1024;
+        canvas.width = width;
+        canvas.height = height;
+        const bgGrad = ctx.createLinearGradient(0, 0, width, height);
+        bgGrad.addColorStop(0, '#312e81');
+        bgGrad.addColorStop(1, '#0f172a');
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(0, 0, width, height);
+        drawTextOverlay(ctx, width, height, title, author);
+        const finalBase64 = canvas.toDataURL('image/png').replace(/^data:image\/(png|jpg|jpeg);base64,/, "");
+        resolve(finalBase64);
+      } catch (err2) {
+        reject(new Error("Failed to load generated cover background image onto canvas composite canvas. Object details: " + JSON.stringify(e)));
+      }
+    };
+  });
+};
+
+const drawTextOverlay = (ctx: CanvasRenderingContext2D, width: number, height: number, title: string, author: string) => {
 
         // --- Premium Cover Framing & Vignette ---
         // Top dark linear gradient overlay for title contrast
@@ -153,19 +226,4 @@ export const overlayTextOnCover = (base64Image: string, title: string, author: s
         ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
         ctx.font = `600 ${Math.round(width * 0.025)}px 'Segoe UI', 'Inter', sans-serif`;
         ctx.fillText("INNOVATION AI ELECTRONIC BOOK PRESS", width / 2, height * 0.92);
-
-        // Export canvas as PNG base64 string
-        const dataUrl = canvas.toDataURL('image/png');
-        const finalBase64 = dataUrl.replace(/^data:image\/(png|jpg|jpeg);base64,/, "");
-        
-        resolve(finalBase64);
-      } catch (err) {
-        reject(err);
-      }
-    };
-
-    img.onerror = (e) => {
-      reject(new Error("Failed to load generated cover background image onto canvas composite canvas. Object details: " + JSON.stringify(e)));
-    };
-  });
 };

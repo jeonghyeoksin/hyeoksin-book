@@ -18,6 +18,58 @@ const patchNotes: PatchNote[] = [
     ]
   },
   {
+    date: '2026-06-11',
+    version: 'v1.6.6',
+    changes: [
+      '배포 환경(Cloudflare 등) 호환성 강화를 위해 API 구동 방식을 커스텀 직접 입력 시스템으로 롤백 복구 지원'
+    ]
+  },
+  {
+    date: '2026-06-11',
+    version: 'v1.6.5',
+    changes: [
+      'API 키 적용 방식을 AI Studio 네이티브 방식으로 전면 통합 (불필요한 직접 입력창을 제거하고 설정 오류 방지)'
+    ]
+  },
+  {
+    date: '2026-06-01',
+    version: 'v1.6.4',
+    changes: [
+      'API 키 설정 시 공백 또는 줄바꿈 문자가 포함될 경우 "FAILED TO EXECUTE \'APPEND\' ON \'HEADERS\'" 오류가 발생하던 문제를 해결하여 API 키 입력 안정성 개선'
+    ]
+  },
+  {
+    date: '2026-06-01',
+    version: 'v1.6.3',
+    changes: [
+      'Gemini API 버전 차이로 인한 "Requested entity was not found (404)" 오류 수정: 사용자 API 키 권한에 맞춰 구버전 모델(Gemini 2.5 Pro)로 자동 우회하는 무중단 Fallback 시스템 탑재',
+      '존재하지 않는 차세대 이미지 모델(Imagen 4.0)을 호출하여 발생하던 이미지 렌더링 실패 문제를 Imagen 3.0 모델로 롤백 조정'
+    ]
+  },
+  {
+    date: '2026-06-01',
+    version: 'v1.6.2',
+    changes: [
+      'Google API Key 적용 UX 전면 개편: 입력 유효성 추가 검증(AIza Prefix) 및 키 적용 시 직관적인 시각적 피드백(애니메이션) 적용',
+      'API 키 설정 완료 시 기존 발생했던 한도 초과(Quota Error) 팝업을 즉시 자동 해제하여 논스톱 프로세스 구현'
+    ]
+  },
+  {
+    date: '2026-06-01',
+    version: 'v1.6.1',
+    changes: [
+      'Gemini API 호출한도(429 / Quota / Billing Exhausted) 오류에 대한 무감쇠 예외 감지 기능 개발: 특수 Error 객체가 직렬화되지 않는 문제를 해결하여, 사용자에게 개별 API 키를 설정창에 입력하는 방법에 대한 안내 가이드를 제시'
+    ]
+  },
+  {
+    date: '2026-06-01',
+    version: 'v1.6.0',
+    changes: [
+      '주제 선정 단계에 "참고 내용 작성" 항목 추가: 사용자 입력 내용이 최종 결과물에 100% 필수 반영되도록 개선',
+      '최종 검토 화면에 "Docs로 복사하기" 기능 추가: 이미지와 서식이 유지된 상태로 구글 문서나 워드에 바로 붙여넣기 기능 지원'
+    ]
+  },
+  {
     date: '2026-05-27',
     version: 'v1.5.1',
     changes: [

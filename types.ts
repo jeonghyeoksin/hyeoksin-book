@@ -13,6 +13,7 @@ export interface EBookState {
   author: string;
   authorExpertise: string;
   bookStyle: string; // Add bookStyle for topic selection
+  referenceContent?: string; // Optional reference content for topic selection
   pageCount: string; // "AI추천", "20", "30", "50", "100", "150", "200"
   toneAndManner: string;
   coreMessage: string;

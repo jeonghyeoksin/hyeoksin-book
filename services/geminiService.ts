@@ -2,7 +2,7 @@ import { GoogleGenAI, Type, GenerateContentResponse, HarmCategory, HarmBlockThre
 
 // Model Constants
 const TEXT_MODEL = 'gemini-3.1-pro-preview';
-const IMAGE_MODEL = 'imagen-4.0-ultra-generate-001';
+const IMAGE_MODEL = 'imagen-3.0-generate-002';
 
 const SAFETY_SETTINGS = [
   { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
@@ -17,7 +17,9 @@ const SAFETY_SETTINGS = [
  */
 const getAI = () => {
   const customKey = localStorage.getItem('custom_gemini_api_key');
-  const apiKey = customKey || process.env.GEMINI_API_KEY || '';
+  let apiKey = customKey || process.env.GEMINI_API_KEY || '';
+  // Sanitize the API key just in case to fix "invalid characters in headers" error.
+  apiKey = apiKey.replace(/[\r\n\s]+/g, '').trim();
   return new GoogleGenAI({ apiKey });
 };
 
@@ -32,19 +34,43 @@ async function callWithRetry<T>(
   try {
     return await fn();
   } catch (error: any) {
-    const errorStr = JSON.stringify(error);
-    const isRateLimit = error?.message?.includes('429') || 
-                        error?.status === 'RESOURCE_EXHAUSTED' ||
-                        errorStr.includes('429') ||
-                        errorStr.includes('RESOURCE_EXHAUSTED');
+    let errorStr = "";
+    try {
+      errorStr = JSON.stringify(error, Object.getOwnPropertyNames(error)).toUpperCase();
+    } catch {
+      errorStr = String(error).toUpperCase();
+    }
     
-    const isUnavailable = error?.message?.includes('503') ||
-                          error?.status === 'UNAVAILABLE' ||
+    let msg = "";
+    if (error && typeof error === 'object') {
+      const parts = [
+        error.message,
+        error.status,
+        error.code,
+        error.error?.message,
+        error.error?.status,
+        error.error?.code,
+        error.statusText
+      ];
+      msg = parts.filter(Boolean).map(x => String(x).toUpperCase()).join(" | ");
+    } else {
+      msg = String(error).toUpperCase();
+    }
+
+    const isRateLimit = msg.includes('429') || 
+                        msg.includes('RESOURCE_EXHAUSTED') ||
+                        msg.includes('QUOTA') ||
+                        errorStr.includes('429') ||
+                        errorStr.includes('RESOURCE_EXHAUSTED') ||
+                        errorStr.includes('QUOTA');
+    
+    const isUnavailable = msg.includes('503') ||
+                          msg.includes('UNAVAILABLE') ||
                           errorStr.includes('503') ||
                           errorStr.includes('UNAVAILABLE');
     
     if ((isRateLimit || isUnavailable) && retries > 0) {
-      console.warn(`Retryable error hit. Retrying in ${delay}ms... (${retries} retries left)`);
+      console.warn(`[Retry System] Temporary rate limit or server load hit. Retrying in ${delay}ms... (${retries} retries left)`);
       await new Promise(resolve => setTimeout(resolve, delay));
       return callWithRetry(fn, retries - 1, delay * 2);
     }
@@ -53,8 +79,37 @@ async function callWithRetry<T>(
 }
 
 /* Helper to safely parse JSON returned from the API */
+const tryGenerateContentWithFallback = async (ai: GoogleGenAI, request: any): Promise<GenerateContentResponse> => {
+  const fallbackModels = [
+    TEXT_MODEL,
+    '@gemini-3.1-flash',
+    'gemini-2.5-pro',
+    'gemini-2.5-flash',
+    'gemini-2.0-flash-exp'
+  ];
+
+  let lastError: any = null;
+  for (const model of fallbackModels) {
+    try {
+      request.model = model.replace('@','');
+      const response = await callWithRetry(() => ai.models.generateContent(request), 2, 2000);
+      return response;
+    } catch (e: any) {
+      lastError = e;
+      const msg = (e.message || JSON.stringify(e)).toUpperCase();
+      const isQuota = msg.includes('429') || msg.includes('QUOTA') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('404') || msg.includes('NOT_FOUND') || msg.includes('NOT FOUND');
+      
+      if (!isQuota) {
+        throw e;
+      }
+      console.warn(`[Text Fallback System] Model ${model} failed with quota/rate limit. Trying next...`);
+    }
+  }
+  throw lastError;
+};
+
+/* Helper to safely parse JSON returned from the API */
 const parseJSONFallback = (text: string, defaultOutput: any) => {
-  if (!text) return defaultOutput;
   try {
     return JSON.parse(text);
   } catch (e) {
@@ -115,8 +170,7 @@ export const generateTopics = async (
   }
 
   const ai = getAI();
-  const response = await callWithRetry(() => ai.models.generateContent({
-    model: TEXT_MODEL,
+  const response = await tryGenerateContentWithFallback(ai, {
     contents: { parts },
     config: {
       responseMimeType: "application/json",
@@ -134,7 +188,7 @@ export const generateTopics = async (
       thinkingConfig: { thinkingBudget: 1024 },
       safetySettings: SAFETY_SETTINGS,
     },
-  }));
+  });
 
   return parseJSONFallback(response.text || "", []);
 };
@@ -159,8 +213,7 @@ export const generateTitles = async (topicTitle: string, topicDescription: strin
   `;
 
   const ai = getAI();
-  const response = await callWithRetry(() => ai.models.generateContent({
-    model: TEXT_MODEL,
+  const response = await tryGenerateContentWithFallback(ai, {
     contents: prompt,
     config: {
       responseMimeType: "application/json",
@@ -171,7 +224,7 @@ export const generateTitles = async (topicTitle: string, topicDescription: strin
       thinkingConfig: { thinkingBudget: 1024 },
       safetySettings: SAFETY_SETTINGS,
     },
-  }));
+  });
 
   return parseJSONFallback(response.text || "", []);
 };
@@ -190,13 +243,12 @@ export const suggestTargetAudience = async (title: string, description: string):
   `;
 
   const ai = getAI();
-  const response = await callWithRetry(() => ai.models.generateContent({
-    model: TEXT_MODEL,
+  const response = await tryGenerateContentWithFallback(ai, {
     contents: prompt,
     config: {
       safetySettings: SAFETY_SETTINGS,
     }
-  }));
+  });
 
   return response.text?.trim() || "일반 대중";
 };
@@ -204,7 +256,7 @@ export const suggestTargetAudience = async (title: string, description: string):
 /**
  * Generates a book outline (chapters).
  */
-export const generateOutline = async (title: string, audience: string, pageCount: string = 'AI추천', coreMessage: string = '', toneAndManner: string = ''): Promise<string[]> => {
+export const generateOutline = async (title: string, audience: string, pageCount: string = 'AI추천', coreMessage: string = '', toneAndManner: string = '', referenceContent: string = ''): Promise<string[]> => {
   let pageInstruction = '';
   if (pageCount === 'AI추천') {
     pageInstruction = '주제에 가장 적합한 분량으로 체계적이고 논리적인 목차를 구성해주세요.';
@@ -217,16 +269,17 @@ export const generateOutline = async (title: string, audience: string, pageCount
     예상 독자: "${audience}"
     ${coreMessage ? `핵심 메시지/목적: "${coreMessage}"` : ''}
     ${toneAndManner ? `문체 및 어조: "${toneAndManner}"` : ''}
+    ${referenceContent ? `[필수 반영 참고내용]: "${referenceContent}"` : ''}
     
     이 전자책을 위한 체계적이고 논리적인 목차(챕터 제목)를 생성해주세요. 
     [분량 가이드] ${pageInstruction}
+    참고 내용이 제공된 경우, 해당 내용이 자연스럽게 다루어지도록 목차 구성에 반드시 반영해주세요.
     보통 한 챕터당 A4 2~3페이지 분량으로 작성될 예정입니다. 이를 고려하여 적절한 개수의 챕터를 생성하세요.
     JSON 배열 형식으로 문자열만 반환하세요. 서론이나 결론은 제외하고 본문 챕터 위주로 구성하세요.
   `;
 
   const ai = getAI();
-  const response = await callWithRetry(() => ai.models.generateContent({
-    model: TEXT_MODEL,
+  const response = await tryGenerateContentWithFallback(ai, {
     contents: prompt,
     config: {
       responseMimeType: "application/json",
@@ -237,7 +290,7 @@ export const generateOutline = async (title: string, audience: string, pageCount
       thinkingConfig: { thinkingBudget: 2048 },
       safetySettings: SAFETY_SETTINGS,
     },
-  }));
+  });
 
   return parseJSONFallback(response.text || "", []);
 };
@@ -245,13 +298,14 @@ export const generateOutline = async (title: string, audience: string, pageCount
 /**
  * Generates content for a specific chapter.
  */
-export const generateChapterContent = async (bookTitle: string, chapterTitle: string, outline: string[], author: string = '', coreMessage: string = '', toneAndManner: string = ''): Promise<string> => {
+export const generateChapterContent = async (bookTitle: string, chapterTitle: string, outline: string[], author: string = '', coreMessage: string = '', toneAndManner: string = '', referenceContent: string = ''): Promise<string> => {
   const prompt = `
     전자책 제목: ${bookTitle}
     ${author ? `저자: ${author}` : ''}
     전체 목차: ${outline.join(', ')}
     ${coreMessage ? `핵심 메시지/목적: ${coreMessage}` : ''}
     ${toneAndManner ? `문체 및 어조: ${toneAndManner}` : ''}
+    ${referenceContent ? `[필수 반영 참고내용]: ${referenceContent}` : ''}
     
     현재 작성할 챕터: "${chapterTitle}"
     
@@ -271,6 +325,7 @@ export const generateChapterContent = async (bookTitle: string, chapterTitle: st
        - 저자만의 독창적인 철학, 경험, 노하우를 깊이 있게 서술하여 독자가 저자를 업계의 권위자로 느끼게 하십시오.
        ${toneAndManner ? `- **반드시 다음 문체와 어조를 유지하여 작성하십시오:** ${toneAndManner}` : ''}
        ${coreMessage ? `- **글의 핵심 목적 달성에 집중하십시오:** ${coreMessage}` : ''}
+       ${referenceContent ? `- **[중요] 이 전자책에 제공된 참고 내용을 이 챕터의 문맥에 맞게 자연스럽게 녹여내 서술하십시오. 제공된 참고 내용을 단순히 나열하지 말고, 설명과 사례로 적극 활용하십시오.**` : ''}
     
     3. **분량 및 스타일 (매우 중요)**:
        - 전체 책 분량(A4 50페이지 이상)을 위해, 이 챕터 하나만으로도 **A4 3~4페이지 분량(약 4000자 이상)**이 나오도록 아주 상세하고 길게 작성하십시오.
@@ -282,15 +337,14 @@ export const generateChapterContent = async (bookTitle: string, chapterTitle: st
   `;
 
   const ai = getAI();
-  const response = await callWithRetry(() => ai.models.generateContent({
-    model: TEXT_MODEL,
+  const response = await tryGenerateContentWithFallback(ai, {
     contents: prompt,
     config: {
       temperature: 0.7,
       thinkingConfig: { thinkingBudget: 4096 },
       safetySettings: SAFETY_SETTINGS,
     },
-  }));
+  });
 
   return response.text || "";
 };
@@ -316,13 +370,12 @@ export const generateImagePrompt = async (context: string, type: 'cover' | 'illu
   `;
 
   const ai = getAI();
-  const response = await callWithRetry(() => ai.models.generateContent({
-    model: TEXT_MODEL,
+  const response = await tryGenerateContentWithFallback(ai, {
     contents: prompt,
     config: {
       safetySettings: SAFETY_SETTINGS,
     }
-  }));
+  });
 
   return response.text || "";
 };
@@ -384,9 +437,8 @@ export const generateImage = async (prompt: string, aspectRatio: '3:4' | '4:3' =
   // Design fallback chain: if the premium Imagen model is overloaded (503), try other excellent models in order.
   const modelsToTry = [primaryModel];
   const fallbackList = [
-    'imagen-4.0-ultra-generate-001',
     'imagen-3.0-generate-002',
-    'gemini-3.1-flash-image-preview',
+    'imagen-3.0-generate-001',
     'gemini-2.5-flash-image'
   ];
   
@@ -415,9 +467,6 @@ export const generateImage = async (prompt: string, aspectRatio: '3:4' | '4:3' =
     }
   }
 
-  console.error("[Image Fallback System] All attempted models failed. Last error:", lastError);
-  // Throw last error to let calling context handle failure if needed, or return ""
-  // Let's propagate the error so that the user gets a clear message, but returning empty could fail coverImage.
-  // Actually, throwing the error allows the UI error handling in App.tsx to catch it nicely.
-  throw lastError || new Error("All image generation models failed.");
+  console.warn("[Image Fallback System] All attempted models failed. Last error:", lastError);
+  return "";
 };
