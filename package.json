@@ -16,7 +16,9 @@
     "lucide-react": "^0.563.0",
     "react-markdown": "^10.1.0",
     "file-saver": "^2.0.5",
-    "docx": "^9.5.1"
+    "docx": "^9.5.1",
+    "jspdf": "^2.5.2",
+    "html2canvas": "^1.4.1"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

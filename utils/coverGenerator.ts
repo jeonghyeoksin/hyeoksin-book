@@ -1,229 +1,244 @@
 /**
- * Programmatically overlays the Korean Book Title and Author name onto the generated cover image
- * using HTML Canvas to guarantee 100% crisp, correct, and professional typography.
+ * Programmatically composes a flat-design, A4-proportioned Korean e-book cover
+ * (느낌: 첨부된 샘플 표지들 — 굵은 한글 타이포 + 강조 키워드 + 일러스트 영역 + 하단 컬러 밴드 설명).
+ *
+ * 결과 캔버스는 A4 비율(1:√2)로 생성되어 PDF에서 1페이지에 "딱 맞게" 들어갑니다.
  */
-export const overlayTextOnCover = (base64Image: string, title: string, author: string): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    // If we have no image due to API quota, just draw a nice clean gradient background!
-    if (!base64Image || base64Image.trim() === '') {
-      try {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return reject(new Error("Could not get canvas context"));
-        const width = 768;
-        const height = 1024;
-        canvas.width = width;
-        canvas.height = height;
 
-        // Draw an elegant dark slate gradient fallback background
-        const bgGrad = ctx.createLinearGradient(0, 0, width, height);
-        bgGrad.addColorStop(0, '#1e1b4b'); // indigo-950
-        bgGrad.addColorStop(1, '#0f172a'); // slate-900
-        ctx.fillStyle = bgGrad;
-        ctx.fillRect(0, 0, width, height);
+// A4 ratio canvas (150dpi 기준). width/height = 0.707 (A4 세로형)
+const CANVAS_W = 1240;
+const CANVAS_H = 1754;
 
-        // Add some abstract shapes to make it less boring
-        ctx.beginPath();
-        ctx.arc(width * 0.8, height * 0.2, width * 0.4, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(79, 70, 229, 0.1)';
-        ctx.fill();
+interface CoverOptions {
+  subtitle?: string;    // 상단 작은 부제 (예: 핵심 메시지)
+  description?: string; // 하단 밴드 설명 (예: 주제 설명)
+}
 
-        ctx.beginPath();
-        ctx.arc(width * 0.2, height * 0.8, width * 0.5, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.4)';
-        ctx.fill();
+interface Theme {
+  top: string;    // 상단(라이트) 영역 배경
+  band: string;   // 하단 비비드 밴드
+  accent: string; // 강조 키워드/포인트 색
+  title: string;  // 라이트 영역 위 제목 색
+}
 
-        // Proceed to text overlay logic
-        drawTextOverlay(ctx, width, height, title, author);
-        const finalBase64 = canvas.toDataURL('image/png').replace(/^data:image\/(png|jpg|jpeg);base64,/, "");
-        resolve(finalBase64);
-      } catch (e) {
-        reject(e);
-      }
-      return;
-    }
+// 샘플 표지에서 영감을 얻은 플랫 디자인 팔레트
+const THEMES: Theme[] = [
+  { top: '#FBF3D5', band: '#D72631', accent: '#D72631', title: '#1F2937' }, // 크림 + 레드 (프레젠테이션)
+  { top: '#E9F8EF', band: '#1E9E54', accent: '#1E3A8A', title: '#14532D' }, // 민트 + 그린 (카피라이팅)
+  { top: '#F1ECFA', band: '#4A2A8A', accent: '#7C3AED', title: '#2E1065' }, // 라벤더 + 퍼플 (시간관리)
+  { top: '#E8F4FB', band: '#2D7DD2', accent: '#1B3A6B', title: '#0C4A6E' }, // 스카이 + 블루 (바다)
+  { top: '#FDEDE8', band: '#EF5B3C', accent: '#EF5B3C', title: '#7C2D12' }, // 피치 + 코랄
+  { top: '#FFF4E6', band: '#F2994A', accent: '#B45309', title: '#7C2D12' }, // 옐로우 + 오렌지
+];
 
-    const img = new Image();
-    
-    const imgSrc = base64Image.startsWith('data:') 
-      ? base64Image 
-      : `data:image/png;base64,${base64Image}`;
-    
-    img.src = imgSrc;
-    
-    img.onload = () => {
-      try {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          reject(new Error("Could not get canvas context"));
-          return;
-        }
-
-        const width = img.naturalWidth || 768;
-        const height = img.naturalHeight || 1024;
-        canvas.width = width;
-        canvas.height = height;
-
-        ctx.drawImage(img, 0, 0, width, height);
-        
-        drawTextOverlay(ctx, width, height, title, author);
-
-        const dataUrl = canvas.toDataURL('image/png');
-        const finalBase64 = dataUrl.replace(/^data:image\/(png|jpg|jpeg);base64,/, "");
-        
-        resolve(finalBase64);
-      } catch (err) {
-        reject(err);
-      }
-    };
-
-    img.onerror = (e) => {
-      // If the image failed to load but exists, try to recover with gradient
-      try {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return reject(new Error("Could not get canvas context"));
-        const width = 768;
-        const height = 1024;
-        canvas.width = width;
-        canvas.height = height;
-        const bgGrad = ctx.createLinearGradient(0, 0, width, height);
-        bgGrad.addColorStop(0, '#312e81');
-        bgGrad.addColorStop(1, '#0f172a');
-        ctx.fillStyle = bgGrad;
-        ctx.fillRect(0, 0, width, height);
-        drawTextOverlay(ctx, width, height, title, author);
-        const finalBase64 = canvas.toDataURL('image/png').replace(/^data:image\/(png|jpg|jpeg);base64,/, "");
-        resolve(finalBase64);
-      } catch (err2) {
-        reject(new Error("Failed to load generated cover background image onto canvas composite canvas. Object details: " + JSON.stringify(e)));
-      }
-    };
-  });
+const pickTheme = (seed: string): Theme => {
+  let sum = 0;
+  for (let i = 0; i < seed.length; i++) sum += seed.charCodeAt(i);
+  return THEMES[sum % THEMES.length];
 };
 
-const drawTextOverlay = (ctx: CanvasRenderingContext2D, width: number, height: number, title: string, author: string) => {
+// 한글/영문 혼용 제목을 폭에 맞춰 줄바꿈
+const wrapText = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] => {
+  const words = text.split(' ');
+  const lines: string[] = [];
+  let current = '';
+  for (const word of words) {
+    const test = current ? current + ' ' + word : word;
+    if (ctx.measureText(test).width > maxWidth && current) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = test;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+};
 
-        // --- Premium Cover Framing & Vignette ---
-        // Top dark linear gradient overlay for title contrast
-        const topGrad = ctx.createLinearGradient(0, 0, 0, height * 0.45);
-        topGrad.addColorStop(0, 'rgba(0, 0, 0, 0.75)');
-        topGrad.addColorStop(0.5, 'rgba(0, 0, 0, 0.35)');
-        topGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-        ctx.fillStyle = topGrad;
-        ctx.fillRect(0, 0, width, height * 0.45);
+const loadImage = (src: string): Promise<HTMLImageElement> =>
+  new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
 
-        // Bottom dark linear gradient overlay for author & publisher contrast
-        const bottomGrad = ctx.createLinearGradient(0, height * 0.55, 0, height);
-        bottomGrad.addColorStop(0, 'rgba(0, 0, 0, 0)');
-        bottomGrad.addColorStop(0.5, 'rgba(0, 0, 0, 0.45)');
-        bottomGrad.addColorStop(1, 'rgba(0, 0, 0, 0.85)');
-        ctx.fillStyle = bottomGrad;
-        ctx.fillRect(0, height * 0.55, width, height * 0.45);
+const drawRoundedRect = (
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number, r: number
+) => {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+};
 
-        // Setup common text options
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
+export const overlayTextOnCover = async (
+  base64Image: string,
+  title: string,
+  author: string,
+  options: CoverOptions = {}
+): Promise<string> => {
+  // 한글 폰트가 적용된 상태에서 그리도록 폰트 로딩 대기
+  try {
+    if ((document as any).fonts && (document as any).fonts.ready) {
+      await (document as any).fonts.ready;
+    }
+  } catch { /* ignore */ }
 
-        // 1. Draw top brand subtitle (Minimalist Editorial Feel)
-        ctx.fillStyle = 'rgba(243, 244, 246, 0.85)'; // Slate-100 with opacity
-        ctx.font = `bold ${Math.round(width * 0.026)}px 'Segoe UI', 'Inter', 'Apple SD Gothic Neo', sans-serif`;
-        // Draw a delicate top brand text
-        ctx.fillText("I N N O V A T I O N   A I   E - B O O K", width / 2, height * 0.08);
+  const canvas = document.createElement('canvas');
+  canvas.width = CANVAS_W;
+  canvas.height = CANVAS_H;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Could not get canvas context');
 
-        // Delicate decorative separator accent line
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(width * 0.35, height * 0.115);
-        ctx.lineTo(width * 0.65, height * 0.115);
-        ctx.stroke();
+  const W = CANVAS_W;
+  const H = CANVAS_H;
+  const theme = pickTheme(title || 'innovation');
 
-        // 2. Wrap and draw the Main Korean Title
-        // Dynamic font-size sizing based on the length of the Korean title
-        let titleFontSize = Math.round(width * 0.075);
-        if (title.length > 25) {
-          titleFontSize = Math.round(width * 0.052);
-        } else if (title.length > 15) {
-          titleFontSize = Math.round(width * 0.062);
-        } else if (title.length > 8) {
-          titleFontSize = Math.round(width * 0.070);
-        }
+  // --- 1. 배경: 상단 라이트존 + 하단 비비드 밴드 ---
+  const bandTop = H * 0.60; // 하단 밴드 시작 지점
 
-        ctx.font = `900 ${titleFontSize}px 'Malgun Gothic', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Segoe UI', sans-serif`;
-        
-        // Render beautiful typography shadows
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
-        ctx.shadowBlur = 15;
-        ctx.shadowOffsetX = 1;
-        ctx.shadowOffsetY = 3;
+  ctx.fillStyle = theme.top;
+  ctx.fillRect(0, 0, W, bandTop);
 
-        // Custom word wrap algorithm tailored for book titles (keeping words together)
-        const words = title.split(' ');
-        const lines: string[] = [];
-        let currentLine = '';
-        const maxTextWidth = width * 0.82; // Safe horizontal padding
+  ctx.fillStyle = theme.band;
+  ctx.fillRect(0, bandTop, W, H - bandTop);
 
-        for (let i = 0; i < words.length; i++) {
-          const testLine = currentLine ? currentLine + ' ' + words[i] : words[i];
-          const metrics = ctx.measureText(testLine);
-          if (metrics.width > maxTextWidth && i > 0) {
-            lines.push(currentLine);
-            currentLine = words[i];
-          } else {
-            currentLine = testLine;
-          }
-        }
-        lines.push(currentLine);
+  // 라이트존 장식용 기하 도형 (은은하게)
+  ctx.save();
+  ctx.globalAlpha = 0.08;
+  ctx.fillStyle = theme.band;
+  ctx.beginPath();
+  ctx.arc(W * 0.88, H * 0.10, W * 0.22, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(W * 0.10, H * 0.42, W * 0.16, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 
-        // If title wraps multiple lines, adjust start Y coordinate to balance vertical alignment
-        const lineSpacing = 1.35;
-        const totalHeightOfTitle = lines.length * titleFontSize * lineSpacing;
-        let startY = height * 0.28 - (totalHeightOfTitle / 2) + (titleFontSize / 2);
+  // 상단 컬러 액센트 바
+  ctx.fillStyle = theme.accent;
+  ctx.fillRect(0, 0, W, H * 0.014);
 
-        // Highlight colors for titles (Draw white text, with possible golden highlights for key phrases etc)
-        ctx.fillStyle = '#FFFFFF';
-        
-        lines.forEach((lineText, idx) => {
-          ctx.fillText(lineText, width / 2, startY + (idx * titleFontSize * lineSpacing));
-        });
+  const padX = W * 0.10;
+  const contentW = W - padX * 2;
 
-        // Clear shadows for other visual treatments
-        ctx.shadowColor = 'transparent';
-        ctx.shadowBlur = 0;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 0;
+  // --- 2. 상단 부제 (작은 캡션) ---
+  const subtitle = (options.subtitle || '한번 읽으면 평생 써먹는 핵심 가이드').trim();
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = theme.accent;
+  ctx.font = `700 ${Math.round(W * 0.030)}px 'Noto Sans KR', 'Malgun Gothic', sans-serif`;
+  const subClipped = subtitle.length > 28 ? subtitle.slice(0, 28) + '…' : subtitle;
+  ctx.fillText(subClipped, padX, H * 0.105);
 
-        // Draw elegant divider before author section
-        ctx.strokeStyle = 'rgba(251, 191, 36, 0.35)'; // gold-colored translucent divider
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(width * 0.45, height * 0.71);
-        ctx.lineTo(width * 0.55, height * 0.71);
-        ctx.stroke();
+  // 부제 밑 구분선
+  ctx.strokeStyle = theme.accent;
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(padX, H * 0.120);
+  ctx.lineTo(padX + W * 0.14, H * 0.120);
+  ctx.stroke();
 
-        // 3. Draw Author Section
-        // Small premium tag: "저 자" (AUTHOR)
-        ctx.fillStyle = '#FBBF24'; // Premium Amber/Gold color
-        ctx.font = `bold ${Math.round(width * 0.026)}px 'Segoe UI', 'Inter', 'Apple SD Gothic Neo', sans-serif`;
-        ctx.fillText("W R I T T E N   B Y", width / 2, height * 0.75);
+  // --- 3. 메인 제목 (굵은 한글, 마지막 줄 강조색) ---
+  let titleSize = Math.round(W * 0.105);
+  if (title.length > 22) titleSize = Math.round(W * 0.066);
+  else if (title.length > 14) titleSize = Math.round(W * 0.080);
+  else if (title.length > 8) titleSize = Math.round(W * 0.094);
 
-        // Core Author name
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = `bold ${Math.round(width * 0.045)}px 'Malgun Gothic', 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif`;
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
-        ctx.shadowBlur = 8;
-        ctx.shadowOffsetY = 2;
-        ctx.fillText(author, width / 2, height * 0.81);
+  ctx.font = `900 ${titleSize}px 'Noto Sans KR', 'Malgun Gothic', sans-serif`;
+  const titleLines = wrapText(ctx, title, contentW);
+  const lineGap = titleSize * 1.18;
+  let ty = H * 0.20;
 
-        // Clear shadow
-        ctx.shadowColor = 'transparent';
-        ctx.shadowBlur = 0;
-        ctx.shadowOffsetY = 0;
+  titleLines.forEach((line, idx) => {
+    // 마지막 줄(또는 단독 줄이 여러 단어일 때 핵심 키워드 줄)을 강조색으로
+    const isAccent = titleLines.length > 1 ? idx === titleLines.length - 1 : false;
+    ctx.fillStyle = isAccent ? theme.accent : theme.title;
+    ctx.fillText(line, padX, ty + idx * lineGap);
+  });
+  const titleBottom = ty + (titleLines.length - 1) * lineGap;
 
-        // 4. Elegant bottom publishing logo / publishing credit
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-        ctx.font = `600 ${Math.round(width * 0.025)}px 'Segoe UI', 'Inter', sans-serif`;
-        ctx.fillText("INNOVATION AI ELECTRONIC BOOK PRESS", width / 2, height * 0.92);
+  // --- 4. 일러스트 영역 (AI 이미지가 있으면 라운드 프레임에 cover-fit) ---
+  const illTop = titleBottom + H * 0.045;
+  const illBottom = bandTop - H * 0.04;
+  const illH = illBottom - illTop;
+
+  if (base64Image && base64Image.trim() !== '' && illH > 80) {
+    try {
+      const imgSrc = base64Image.startsWith('data:')
+        ? base64Image
+        : `data:image/png;base64,${base64Image}`;
+      const img = await loadImage(imgSrc);
+
+      const frameX = padX;
+      const frameY = illTop;
+      const frameW = contentW;
+      const frameH = illH;
+
+      ctx.save();
+      drawRoundedRect(ctx, frameX, frameY, frameW, frameH, 28);
+      ctx.clip();
+
+      // cover-fit
+      const scale = Math.max(frameW / img.naturalWidth, frameH / img.naturalHeight);
+      const dw = img.naturalWidth * scale;
+      const dh = img.naturalHeight * scale;
+      const dx = frameX + (frameW - dw) / 2;
+      const dy = frameY + (frameH - dh) / 2;
+      ctx.drawImage(img, dx, dy, dw, dh);
+      ctx.restore();
+    } catch (e) {
+      console.warn('Cover illustration draw failed, continuing without it.', e);
+    }
+  }
+
+  // --- 5. 하단 비비드 밴드 콘텐츠 ---
+  ctx.textAlign = 'center';
+
+  // 헤드라인 (밴드 상단)
+  const description = (options.description || '').trim();
+  let headline = description.split(/[.!?。\n]/)[0].trim();
+  if (!headline) headline = title;
+  if (headline.length > 34) headline = headline.slice(0, 34) + '…';
+
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = `800 ${Math.round(W * 0.042)}px 'Noto Sans KR', 'Malgun Gothic', sans-serif`;
+  ctx.fillText(headline, W / 2, bandTop + H * 0.075);
+
+  // 헤드라인 밑 구분선
+  ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(W * 0.42, bandTop + H * 0.095);
+  ctx.lineTo(W * 0.58, bandTop + H * 0.095);
+  ctx.stroke();
+
+  // 설명 본문 (여러 줄)
+  if (description) {
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.font = `500 ${Math.round(W * 0.027)}px 'Noto Sans KR', 'Malgun Gothic', sans-serif`;
+    const descLines = wrapText(ctx, description, contentW * 1.05).slice(0, 3);
+    let dy2 = bandTop + H * 0.135;
+    descLines.forEach((line) => {
+      ctx.fillText(line, W / 2, dy2);
+      dy2 += Math.round(W * 0.040);
+    });
+  }
+
+  // 저자 + 출판 크레딧 (밴드 하단)
+  ctx.fillStyle = 'rgba(255,255,255,0.95)';
+  ctx.font = `700 ${Math.round(W * 0.030)}px 'Noto Sans KR', 'Malgun Gothic', sans-serif`;
+  ctx.fillText(`지은이  ${author || '혁신 AI 저자'}`, W / 2, H - H * 0.055);
+
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.font = `600 ${Math.round(W * 0.020)}px 'Segoe UI', 'Noto Sans KR', sans-serif`;
+  ctx.fillText('INNOVATION AI E-BOOK', W / 2, H - H * 0.028);
+
+  const dataUrl = canvas.toDataURL('image/png');
+  return dataUrl.replace(/^data:image\/(png|jpg|jpeg);base64,/, '');
 };

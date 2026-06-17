@@ -359,11 +359,11 @@ export const generateImagePrompt = async (context: string, type: 'cover' | 'illu
     Context: ${context}
     Type: ${type === 'cover' ? 'Book Cover' : 'Book Illustration'}
     
-    Style: ${type === 'cover' ? 'Minimalist, Modern, Eye-catching, High resolution, Typography friendly' : 'Digital Art, Storybook style, Clean lines'}
-    
+    Style: ${type === 'cover' ? 'Modern flat vector illustration, clean geometric shapes, bold simple color palette, Korean e-book cover style, centered single subject with generous negative space, no gradients clutter' : 'Digital Art, Storybook style, Clean lines'}
+
     [CRITICAL INSTRUCTION]
-    ${type === 'cover' 
-      ? `The generated image MUST be a purely visual art piece, painting, photograph, or illustration suited as a premium book cover. It MUST NOT contain any text, letters, titles, words, fonts, typography, characters, or symbols of any language. Keep the composition clean, balanced, and with atmospheric spaces suitable for having title texts overlaid programmatically later. Do not draw any text.`
+    ${type === 'cover'
+      ? `The generated image MUST be a FLAT, MINIMAL, VECTOR-STYLE illustration (like a modern Korean self-help e-book cover) — a single clear central icon/object or simple character, on a clean solid or lightly textured background, with lots of empty space. It MUST NOT contain any text, letters, titles, words, fonts, typography, characters glyphs, or symbols of any language. Avoid photorealism. Keep it simple and graphic so it reads well when placed inside a cover layout. Do not draw any text.`
       : `DO NOT include any text, typography, fonts, characters, letters, or words in the image. The image must be purely visual art without any written elements.`}
     
     Output: Just the English prompt string.

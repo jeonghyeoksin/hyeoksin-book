@@ -3,6 +3,7 @@ import { Layout } from './components/Layout';
 import { AppStep, EBookState, GeneratedTopic, Chapter } from './types';
 import * as geminiService from './services/geminiService';
 import { generateAndDownloadDocx } from './utils/docxGenerator';
+import { generateCoverPdf, generateEbookPdf } from './utils/pdfGenerator';
 import { overlayTextOnCover } from './utils/coverGenerator';
 import { 
   ArrowRight, 
@@ -16,6 +17,7 @@ import {
   PenTool,
   BookOpen,
   Download,
+  FileDown,
   Paperclip,
   X,
   User,
@@ -481,7 +483,10 @@ const App: React.FC = () => {
             
             setLoadingMessage('표지에 한국어 타이틀과 저자 정보를 선명하게 디자인 중입니다...');
             try {
-                const composited = await overlayTextOnCover(coverImage, localEbookState.title, authorToUse);
+                const composited = await overlayTextOnCover(coverImage, localEbookState.title, authorToUse, {
+                    subtitle: localEbookState.coreMessage,
+                    description: localEbookState.topic,
+                });
                 coverImage = composited;
             } catch (overlayErr) {
                 console.error("Failed to apply text overlay onto cover background:", overlayErr);
@@ -660,7 +665,10 @@ const App: React.FC = () => {
 
       setLoadingMessage('표지에 한국어 타이틀과 저자 정보를 선명하게 디자인 중입니다...');
       try {
-        const composited = await overlayTextOnCover(base64Image, ebook.title, authorToUse);
+        const composited = await overlayTextOnCover(base64Image, ebook.title, authorToUse, {
+          subtitle: ebook.coreMessage,
+          description: ebook.topic,
+        });
         base64Image = composited;
       } catch (overlayErr) {
         console.error("Failed to apply text overlay onto cover background:", overlayErr);
@@ -707,6 +715,36 @@ const App: React.FC = () => {
     } catch (e) {
         console.error(e);
         setGlobalError('파일 생성 중 오류가 발생했습니다.');
+    }
+  };
+
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const handleDownloadPdf = async () => {
+    setPdfLoading(true);
+    setLoadingMessage('PDF 파일을 생성하고 있습니다. 잠시만 기다려주세요...');
+    try {
+        await generateEbookPdf(ebook);
+    } catch (e) {
+        console.error(e);
+        setGlobalError(getFriendlyErrorMessage(e, 'PDF 생성 중 오류가 발생했습니다.'));
+    } finally {
+        setPdfLoading(false);
+    }
+  };
+
+  const handleDownloadCoverPdf = async () => {
+    if (!ebook.coverImage) {
+        setGlobalError('먼저 표지를 생성해주세요.');
+        return;
+    }
+    setPdfLoading(true);
+    try {
+        await generateCoverPdf(ebook);
+    } catch (e) {
+        console.error(e);
+        setGlobalError(getFriendlyErrorMessage(e, '표지 PDF 생성 중 오류가 발생했습니다.'));
+    } finally {
+        setPdfLoading(false);
     }
   };
 
@@ -1167,10 +1205,10 @@ const App: React.FC = () => {
 
         <div className="flex flex-col md:flex-row gap-8 items-start justify-center">
             <div className="flex-1 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 w-full max-w-md mx-auto">
-                <div className={`aspect-[3/4] bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden border-2 border-dashed border-slate-300 relative ${loading ? 'animate-pulse' : ''}`}>
+                <div className={`aspect-[210/297] bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden border-2 border-dashed border-slate-300 relative ${loading ? 'animate-pulse' : ''}`}>
                     {ebook.coverImage ? (
                         <div className="relative w-full h-full group">
-                            <img src={`data:image/png;base64,${ebook.coverImage}`} alt="Book Cover" className="w-full h-full object-cover" />
+                            <img src={`data:image/png;base64,${ebook.coverImage}`} alt="Book Cover" className="w-full h-full object-contain" />
                         </div>
                     ) : (
                         <div className="text-center p-6 text-slate-400">
@@ -1197,6 +1235,9 @@ const App: React.FC = () => {
                                 <>
                                     <button onClick={handleGenerateCover} className="w-full py-3 bg-slate-100 text-slate-700 rounded-lg font-bold hover:bg-slate-200 flex items-center justify-center gap-2">
                                         <RefreshCw size={18}/> 다시 생성
+                                    </button>
+                                    <button onClick={handleDownloadCoverPdf} disabled={pdfLoading} className="w-full py-3 bg-indigo-700 text-white rounded-lg font-bold hover:bg-indigo-800 shadow-md flex items-center justify-center gap-2 disabled:opacity-60">
+                                        {pdfLoading ? <Loader2 className="animate-spin" size={18}/> : <FileDown size={18}/>} 표지 PDF 저장 (A4)
                                     </button>
                                     <button onClick={() => setCurrentStep(AppStep.ILLUSTRATION)} className="w-full py-3 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700 shadow-md flex items-center justify-center gap-2">
                                         <CheckCircle2 size={18}/> 확정 및 다음 단계
@@ -1348,23 +1389,32 @@ const App: React.FC = () => {
         <div className="flex items-center justify-between border-b border-slate-200 pb-6">
             <div>
                 <h2 className="text-3xl font-bold text-slate-800">최종 검토 및 다운로드</h2>
-                <p className="text-slate-500 mt-1">완성된 전자책을 확인하고 DOCX 파일로 저장하거나 Docs로 복사하세요.</p>
+                <p className="text-slate-500 mt-1">완성된 전자책을 PDF/DOCX 파일로 저장하거나 Docs로 복사하세요.</p>
             </div>
-            <div className="flex items-center gap-3">
-                <button 
+            <div className="flex items-center gap-3 flex-wrap justify-end">
+                <button
                     onClick={handleCopyToDocs}
-                    disabled={loading}
-                    className="flex items-center gap-2 px-6 py-3 bg-white text-indigo-700 border-2 border-indigo-700 rounded-xl font-bold hover:bg-indigo-50 shadow-sm transition-transform active:scale-95 disabled:opacity-50"
+                    disabled={loading || pdfLoading}
+                    className="flex items-center gap-2 px-5 py-3 bg-white text-indigo-700 border-2 border-indigo-700 rounded-xl font-bold hover:bg-indigo-50 shadow-sm transition-transform active:scale-95 disabled:opacity-50"
                 >
                     {loading ? <Loader2 className="animate-spin w-5 h-5" /> : <Copy size={20} />}
-                    Docs로 복사하기
+                    Docs로 복사
                 </button>
-                <button 
+                <button
                     onClick={handleDownload}
-                    className="flex items-center gap-2 px-6 py-3 bg-indigo-700 text-white rounded-xl font-bold hover:bg-indigo-800 shadow-lg transition-transform active:scale-95"
+                    disabled={pdfLoading}
+                    className="flex items-center gap-2 px-5 py-3 bg-white text-slate-700 border-2 border-slate-300 rounded-xl font-bold hover:bg-slate-50 shadow-sm transition-transform active:scale-95 disabled:opacity-50"
                 >
                     <Download size={20} />
-                    DOCX 다운로드
+                    DOCX
+                </button>
+                <button
+                    onClick={handleDownloadPdf}
+                    disabled={pdfLoading}
+                    className="flex items-center gap-2 px-6 py-3 bg-indigo-700 text-white rounded-xl font-bold hover:bg-indigo-800 shadow-lg transition-transform active:scale-95 disabled:opacity-60"
+                >
+                    {pdfLoading ? <Loader2 className="animate-spin w-5 h-5" /> : <FileDown size={20} />}
+                    {pdfLoading ? 'PDF 생성 중...' : 'PDF 다운로드'}
                 </button>
             </div>
         </div>

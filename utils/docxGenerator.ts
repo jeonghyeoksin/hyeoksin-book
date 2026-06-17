@@ -52,7 +52,7 @@ export const generateAndDownloadDocx = async (ebook: EBookState) => {
         children: [
             new ImageRun({
                 data: base64ToUint8Array(ebook.coverImage),
-                transformation: { width: 400, height: 533 }, // 3:4 ratio approx
+                transformation: { width: 400, height: 566 }, // A4 ratio (1:√2)
             } as any),
         ],
         alignment: AlignmentType.CENTER,
