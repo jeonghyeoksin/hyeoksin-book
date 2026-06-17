@@ -91,9 +91,9 @@ const App: React.FC = () => {
     const cleanKey = apiKeyInput.replace(/[\r\n\s]+/g, '');
 
     if (cleanKey) {
-      if (!cleanKey.startsWith('AIza') || cleanKey.length < 35) {
+      if (cleanKey.length < 20) {
         setApiKeyStatus('error');
-        setGlobalError('올바른 Gemini API 키 형식이 아닙니다 (일반적으로 AIza... 로 시작하는 39자리 문자열입니다)');
+        setGlobalError('올바른 Gemini API 키 형식이 아닙니다 (너무 짧습니다)');
         setTimeout(() => setApiKeyStatus('idle'), 2500);
         return;
       }
