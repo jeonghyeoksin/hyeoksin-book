@@ -1,5 +1,6 @@
 import { Document, Packer, Paragraph, TextRun, ImageRun, HeadingLevel, AlignmentType } from "docx";
 import { EBookState } from "../types";
+import { splitIntoParagraphs } from "./textFormat";
 
 // Helper to convert Base64 string to Uint8Array
 function base64ToUint8Array(base64: string): Uint8Array {
@@ -111,10 +112,9 @@ export const generateAndDownloadDocx = async (ebook: EBookState) => {
       }));
     }
 
-    // Split content by newlines to create paragraphs. 
-    // Since we forbid markdown, we treat every non-empty line as a paragraph.
-    const paragraphs = chapter.content.split('\n').filter(p => p.trim() !== '');
-    
+    // 가독성을 위해 본문을 적절한 문단 단위로 분리한다.
+    const paragraphs = splitIntoParagraphs(chapter.content);
+
     paragraphs.forEach(p => {
         const text = p.trim();
         const children: TextRun[] = [];

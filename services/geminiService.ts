@@ -133,19 +133,23 @@ const parseJSONFallback = (text: string, defaultOutput: any) => {
  * Generates topic ideas based on a keyword and optional reference files.
  */
 export const generateTopics = async (
-  keyword: string, 
+  keyword: string,
   files: { data: string; mimeType: string }[] = [],
   authorExpertise: string = '',
-  bookStyle: string = ''
+  bookStyle: string = '',
+  readerPainPoint: string = '',
+  outcomePromise: string = ''
 ): Promise<{ title: string; description: string }[]> => {
-  
+
   const systemPrompt = `
     사용자가 입력한 정보${files.length > 0 ? '와 첨부된 참고 자료' : ''}를 바탕으로 매력적인 전자책 주제 3가지를 제안해주세요.
-    
+
     [입력된 정보]
     - 핵심 키워드: "${keyword}"
     ${authorExpertise ? `- 저자의 전문성/배경: "${authorExpertise}"` : ''}
     ${bookStyle ? `- 희망하는 전자책 스타일/형식: "${bookStyle}"` : ''}
+    ${readerPainPoint ? `- 타겟 독자의 핵심 고민/페인포인트: "${readerPainPoint}"` : ''}
+    ${outcomePromise ? `- 독자가 이 책을 통해 얻을 변화/약속: "${outcomePromise}"` : ''}
 
     [필수 요구사항]
     1. 각 주제는 '제목'과 '설명'으로 구성되어야 합니다.
@@ -153,7 +157,9 @@ export const generateTopics = async (
     3. **모든 제안된 주제의 '제목'에는 반드시 입력된 키워드 "${keyword}"가 포함되어야 합니다.**
     4. 첨부파일이 있다면 해당 파일의 내용(이미지, 텍스트 등)을 적극적으로 반영하여 주제를 선정해주세요.
     5. 저자의 전문성이나 희망 스타일이 입력되었다면, 이를 최우선으로 반영하여 고품질의 주제를 도출해주세요.
-    
+    ${readerPainPoint ? `6. **독자의 고민("${readerPainPoint}")을 직접 해결해주는 방향으로 주제를 잡고, 설명에 '이 고민이 어떻게 해결되는지'가 드러나게 하세요.**` : ''}
+    ${outcomePromise ? `7. **독자가 얻을 변화("${outcomePromise}")가 설명에 구체적인 베네핏으로 드러나도록 하세요.**` : ''}
+
     JSON 형식으로 출력해주세요.
   `;
 
@@ -196,7 +202,23 @@ export const generateTopics = async (
 /**
  * Generates catchy titles based on a topic.
  */
-export const generateTitles = async (topicTitle: string, topicDescription: string, authorExpertise: string, bookStyle: string): Promise<string[]> => {
+export const generateTitles = async (
+  topicTitle: string,
+  topicDescription: string,
+  authorExpertise: string,
+  bookStyle: string,
+  titleHookStyle: string = '',
+  outcomePromise: string = '',
+  readerPainPoint: string = ''
+): Promise<string[]> => {
+  const hookStyleMap: Record<string, string> = {
+    number: '숫자/리스트형(예: "성과를 2배로 만드는 7가지 법칙") - 구체적 숫자를 반드시 포함',
+    question: '질문형(예: "당신의 보고서는 왜 매번 반려될까?") - 독자의 상황을 찌르는 질문',
+    empathy: '공감형(예: "더 이상 야근하고 싶지 않은 당신에게") - 독자의 감정에 공감',
+    confident: '단정·자신감형(예: "이 책 한 권이면 디자인은 끝난다") - 강하고 확신에 찬 어조',
+  };
+  const hookGuide = hookStyleMap[titleHookStyle] || '';
+
   const prompt = `
     다음 전자책 주제를 바탕으로 독자의 시선을 사로잡는(후킹성 있는) 매력적인 전자책 제목을 3가지 제안해주세요.
 
@@ -205,11 +227,15 @@ export const generateTitles = async (topicTitle: string, topicDescription: strin
     - 주제 설명: "${topicDescription}"
     ${authorExpertise ? `- 저자의 전문성/배경: "${authorExpertise}"` : ''}
     ${bookStyle ? `- 희망하는 전자책 스타일/형식: "${bookStyle}"` : ''}
+    ${readerPainPoint ? `- 타겟 독자의 핵심 고민: "${readerPainPoint}"` : ''}
+    ${outcomePromise ? `- 독자가 얻을 변화/약속: "${outcomePromise}"` : ''}
 
     [필수 요구사항]
     1. 후킹성 있고 타겟 독자의 클릭을 유도할 수 있는 매력적이고 트렌디한 제목이어야 합니다.
     2. 부제(Subtitle)를 포함하여 구성해도 좋습니다. (예: "메인 제목: 부제목")
-    3. JSON 배열 형식(Array of Strings)으로 3가지 제목만 반환해주세요.
+    ${hookGuide ? `3. **제목 스타일은 반드시 다음 형식을 따르세요: ${hookGuide}**` : ''}
+    ${outcomePromise ? `4. 가능하면 독자가 얻을 변화("${outcomePromise}")가 제목이나 부제에서 연상되게 하세요.` : ''}
+    5. JSON 배열 형식(Array of Strings)으로 3가지 제목만 반환해주세요.
   `;
 
   const ai = getAI();
@@ -256,7 +282,7 @@ export const suggestTargetAudience = async (title: string, description: string):
 /**
  * Generates a book outline (chapters).
  */
-export const generateOutline = async (title: string, audience: string, pageCount: string = 'AI추천', coreMessage: string = '', toneAndManner: string = '', referenceContent: string = ''): Promise<string[]> => {
+export const generateOutline = async (title: string, audience: string, pageCount: string = 'AI추천', coreMessage: string = '', toneAndManner: string = '', referenceContent: string = '', outcomePromise: string = '', readerPainPoint: string = ''): Promise<string[]> => {
   let pageInstruction = '';
   if (pageCount === 'AI추천') {
     pageInstruction = '주제에 가장 적합한 분량으로 체계적이고 논리적인 목차를 구성해주세요.';
@@ -269,10 +295,14 @@ export const generateOutline = async (title: string, audience: string, pageCount
     예상 독자: "${audience}"
     ${coreMessage ? `핵심 메시지/목적: "${coreMessage}"` : ''}
     ${toneAndManner ? `문체 및 어조: "${toneAndManner}"` : ''}
+    ${readerPainPoint ? `타겟 독자의 핵심 고민: "${readerPainPoint}"` : ''}
+    ${outcomePromise ? `독자가 얻을 변화/약속: "${outcomePromise}"` : ''}
     ${referenceContent ? `[필수 반영 참고내용]: "${referenceContent}"` : ''}
-    
-    이 전자책을 위한 체계적이고 논리적인 목차(챕터 제목)를 생성해주세요. 
+
+    이 전자책을 위한 체계적이고 논리적인 목차(챕터 제목)를 생성해주세요.
     [분량 가이드] ${pageInstruction}
+    ${readerPainPoint ? `독자의 고민("${readerPainPoint}")을 초반에 공감·진단하고, 중반에 해결책을 단계적으로 제시하며, 후반에 실행/정착으로 이어지는 흐름으로 목차를 설계하세요.` : ''}
+    ${outcomePromise ? `책을 끝까지 읽으면 독자가 "${outcomePromise}" 상태에 도달하도록 목차가 그 변화를 향해 누적되게 구성하세요.` : ''}
     참고 내용이 제공된 경우, 해당 내용이 자연스럽게 다루어지도록 목차 구성에 반드시 반영해주세요.
     보통 한 챕터당 A4 2~3페이지 분량으로 작성될 예정입니다. 이를 고려하여 적절한 개수의 챕터를 생성하세요.
     JSON 배열 형식으로 문자열만 반환하세요. 서론이나 결론은 제외하고 본문 챕터 위주로 구성하세요.
@@ -298,13 +328,15 @@ export const generateOutline = async (title: string, audience: string, pageCount
 /**
  * Generates content for a specific chapter.
  */
-export const generateChapterContent = async (bookTitle: string, chapterTitle: string, outline: string[], author: string = '', coreMessage: string = '', toneAndManner: string = '', referenceContent: string = ''): Promise<string> => {
+export const generateChapterContent = async (bookTitle: string, chapterTitle: string, outline: string[], author: string = '', coreMessage: string = '', toneAndManner: string = '', referenceContent: string = '', outcomePromise: string = '', readerPainPoint: string = ''): Promise<string> => {
   const prompt = `
     전자책 제목: ${bookTitle}
     ${author ? `저자: ${author}` : ''}
     전체 목차: ${outline.join(', ')}
     ${coreMessage ? `핵심 메시지/목적: ${coreMessage}` : ''}
     ${toneAndManner ? `문체 및 어조: ${toneAndManner}` : ''}
+    ${readerPainPoint ? `타겟 독자의 핵심 고민: ${readerPainPoint}` : ''}
+    ${outcomePromise ? `독자가 얻을 변화/약속: ${outcomePromise}` : ''}
     ${referenceContent ? `[필수 반영 참고내용]: ${referenceContent}` : ''}
     
     현재 작성할 챕터: "${chapterTitle}"
@@ -325,6 +357,8 @@ export const generateChapterContent = async (bookTitle: string, chapterTitle: st
        - 저자만의 독창적인 철학, 경험, 노하우를 깊이 있게 서술하여 독자가 저자를 업계의 권위자로 느끼게 하십시오.
        ${toneAndManner ? `- **반드시 다음 문체와 어조를 유지하여 작성하십시오:** ${toneAndManner}` : ''}
        ${coreMessage ? `- **글의 핵심 목적 달성에 집중하십시오:** ${coreMessage}` : ''}
+       ${readerPainPoint ? `- **독자의 고민("${readerPainPoint}")에 공감하는 문장으로 자연스럽게 연결하고, 이 챕터가 그 고민 해결에 어떻게 기여하는지 드러내십시오.**` : ''}
+       ${outcomePromise ? `- **이 챕터의 내용이 최종적으로 독자가 "${outcomePromise}" 상태에 가까워지도록 실질적이고 실행 가능한 내용을 담으십시오.**` : ''}
        ${referenceContent ? `- **[중요] 이 전자책에 제공된 참고 내용을 이 챕터의 문맥에 맞게 자연스럽게 녹여내 서술하십시오. 제공된 참고 내용을 단순히 나열하지 말고, 설명과 사례로 적극 활용하십시오.**` : ''}
     
     3. **분량 및 스타일 (매우 중요)**:
@@ -333,7 +367,7 @@ export const generateChapterContent = async (bookTitle: string, chapterTitle: st
     
     4. **제한 사항**: 본문의 내용에는 '혁신 전자책 AI' 또는 관련된 AI 서비스 이름(Gemini 등)을 절대 언급하지 마십시오. 오직 주제와 내용에 집중하세요.
     5. **형식**: 완성된 산문 형태의 줄글로 작성하세요.
-    6. **가독성 최적화**: 독자가 읽기 편하도록 **두 문단(Paragraph)마다 반드시 한 줄의 빈 줄(Blank Line)**을 삽입하여 단락을 구분하십시오.
+    6. **가독성 최적화 (매우 중요)**: 독자가 읽기 편하도록 **한 문단은 3~4개 문장(약 4~6줄)을 넘기지 않도록 짧게 끊고, 문단과 문단 사이에는 반드시 한 줄의 빈 줄(Blank Line)을 삽입**하십시오. 한 덩어리로 길게 이어 쓰지 말고, 내용의 흐름이 바뀌는 지점마다 문단을 적극적으로 나누어 주십시오.
   `;
 
   const ai = getAI();

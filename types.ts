@@ -17,6 +17,10 @@ export interface EBookState {
   pageCount: string; // "AI추천", "20", "30", "50", "100", "150", "200"
   toneAndManner: string;
   coreMessage: string;
+  outcomePromise?: string;   // 독자가 얻는 변화/약속 (예: "보고서 디자인을 30분 만에 끝낼 수 있다")
+  readerPainPoint?: string;  // 독자의 핵심 고민/페인포인트
+  coverTheme?: string;       // 표지 무드/컬러 키 ('auto' | 'red' | 'green' | ...)
+  titleHookStyle?: string;   // 제목 후킹 스타일 ('' = AI추천 | 'number' | 'question' | 'empathy' | 'confident')
   outline: string[];
   chapters: Chapter[];
   coverPrompt?: string;

@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import { EBookState } from "../types";
+import { splitIntoParagraphs } from "./textFormat";
 
 const A4_W_MM = 210;
 const A4_H_MM = 297;
@@ -28,22 +29,26 @@ export const generateCoverPdf = async (ebook: EBookState): Promise<void> => {
   pdf.save(`${safeName(ebook.title)}_표지.pdf`);
 };
 
-// 본문 색상 태그 -> HTML 변환 (마크다운 금지 규칙에 맞춤)
-const formatContentForHtml = (text: string): string => {
+// 한 문단의 인라인 서식(색상 태그) 처리
+const inlineFormat = (text: string): string => {
   let html = text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/\n{2,}/g, '</p><p>')
-    .replace(/\n/g, '<br/>');
+    .replace(/>/g, '&gt;');
 
   html = html.replace(/\[(RED|IMPORTANT)\](.*?)\[\/\1\]/g, '<span style="color:#dc2626;font-weight:700;">$2</span>');
   html = html.replace(/\[(BLUE|EMPHASIS)\](.*?)\[\/\1\]/g, '<span style="color:#2563eb;font-weight:700;">$2</span>');
   html = html.replace(/\[GREEN\](.*?)\[\/GREEN\]/g, '<span style="color:#16a34a;font-weight:700;">$1</span>');
   html = html.replace(/\[(YELLOW_BG|HIGHLIGHT)\](.*?)\[\/\1\]/g, '<span style="background-color:#fef08a;color:#111;font-weight:700;padding:0 2px;">$2</span>');
 
-  return `<p>${html}</p>`;
+  return html;
 };
+
+// 본문을 가독성 좋은 문단(<p>)들로 변환
+const formatContentForHtml = (text: string): string =>
+  splitIntoParagraphs(text)
+    .map((p) => `<p style="margin:0 0 15px;">${inlineFormat(p)}</p>`)
+    .join('');
 
 const buildContentContainer = (ebook: EBookState): HTMLElement => {
   const currentYear = new Date().getFullYear();

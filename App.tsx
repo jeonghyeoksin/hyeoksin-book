@@ -4,7 +4,8 @@ import { AppStep, EBookState, GeneratedTopic, Chapter } from './types';
 import * as geminiService from './services/geminiService';
 import { generateAndDownloadDocx } from './utils/docxGenerator';
 import { generateCoverPdf, generateEbookPdf } from './utils/pdfGenerator';
-import { overlayTextOnCover } from './utils/coverGenerator';
+import { overlayTextOnCover, COVER_THEMES } from './utils/coverGenerator';
+import { splitIntoParagraphs } from './utils/textFormat';
 import { 
   ArrowRight, 
   Sparkles, 
@@ -39,6 +40,24 @@ interface AttachedFile {
   data: string; // Base64 string without prefix
   mimeType: string;
 }
+
+// 톤앤매너 프리셋 (클릭 시 ebook.toneAndManner 값으로 설정)
+const TONE_PRESETS = [
+  '친근하고 쉽게 설명하는',
+  '전문적이고 신뢰감 있는',
+  '강하게 동기부여하는',
+  '스토리텔링으로 몰입감 있는',
+  '위트있고 유머러스한',
+];
+
+// 제목 후킹 스타일 프리셋
+const TITLE_HOOK_STYLES = [
+  { key: '', label: 'AI 추천' },
+  { key: 'number', label: '숫자형 (리스트)' },
+  { key: 'question', label: '질문형' },
+  { key: 'empathy', label: '공감형' },
+  { key: 'confident', label: '단정·자신감형' },
+];
 
 const App: React.FC = () => {
   const [currentStep, setCurrentStep] = useState<AppStep>(AppStep.TOPIC_SELECTION);
@@ -121,7 +140,10 @@ const App: React.FC = () => {
   const [titleIdeas, setTitleIdeas] = useState<string[]>([]);
   const [selectedTitleIdx, setSelectedTitleIdx] = useState<number | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
-  
+  // 사용자가 첫 화면에서 제목을 직접 정했는지 여부 (true면 자동 생성이 덮어쓰지 않음)
+  const [isTitleUserDefined, setIsTitleUserDefined] = useState(false);
+  const [titleLoading, setTitleLoading] = useState(false);
+
   // E-Book State
   const [ebook, setEbook] = useState<EBookState>({
     topic: '',
@@ -133,6 +155,10 @@ const App: React.FC = () => {
     pageCount: 'AI추천',
     coreMessage: '',
     toneAndManner: '',
+    outcomePromise: '',
+    readerPainPoint: '',
+    coverTheme: 'auto',
+    titleHookStyle: '',
     outline: [],
     chapters: [],
     generateIllustrations: false,
@@ -151,6 +177,7 @@ const App: React.FC = () => {
         if (parsedState.titleIdeas) setTitleIdeas(parsedState.titleIdeas);
         if (parsedState.selectedTitleIdx !== undefined) setSelectedTitleIdx(parsedState.selectedTitleIdx);
         if (parsedState.attachedFiles) setAttachedFiles(parsedState.attachedFiles);
+        if (parsedState.isTitleUserDefined !== undefined) setIsTitleUserDefined(parsedState.isTitleUserDefined);
       } catch (e) {
         console.error("Failed to parse saved state", e);
       }
@@ -165,7 +192,8 @@ const App: React.FC = () => {
       topicIdeas,
       titleIdeas,
       selectedTitleIdx,
-      attachedFiles
+      attachedFiles,
+      isTitleUserDefined
     };
     try {
         localStorage.setItem('ebookState', JSON.stringify(stateToSave));
@@ -184,7 +212,7 @@ const App: React.FC = () => {
             console.error("Failed to save state:", error);
         }
     }
-  }, [ebook, currentStep, topicKeyword, topicIdeas, titleIdeas, selectedTitleIdx, attachedFiles]);
+  }, [ebook, currentStep, topicKeyword, topicIdeas, titleIdeas, selectedTitleIdx, attachedFiles, isTitleUserDefined]);
 
   // --- Helpers ---
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -321,7 +349,7 @@ const App: React.FC = () => {
     setLoadingMessage('Gemini 3 Pro가 입력된 키워드와 자료를 분석하여 브레인스토밍 중입니다...');
     setSelectedTopicIdx(null);
     try {
-      const topics = await geminiService.generateTopics(topicKeyword, attachedFiles, ebook.authorExpertise, ebook.bookStyle);
+      const topics = await geminiService.generateTopics(topicKeyword, attachedFiles, ebook.authorExpertise, ebook.bookStyle, ebook.readerPainPoint, ebook.outcomePromise);
       setTopicIdeas(topics);
     } catch (e: any) {
       console.error("DEBUG Error in generateTopics:", e);
@@ -362,7 +390,7 @@ const App: React.FC = () => {
             }
             setLoadingMessage('Gemini가 최적의 주제를 브레인스토밍 중입니다...');
             setAutomationProgress(5);
-            const topics = await geminiService.generateTopics(topicKeyword, attachedFiles, ebook.authorExpertise, ebook.bookStyle);
+            const topics = await geminiService.generateTopics(topicKeyword, attachedFiles, ebook.authorExpertise, ebook.bookStyle, ebook.readerPainPoint, ebook.outcomePromise);
             if (topics.length === 0) throw new Error("주제 생성 실패");
             
             setTopicIdeas(topics);
@@ -387,16 +415,23 @@ const App: React.FC = () => {
                 chapters: []
             };
             setEbook(localEbookState);
+        } else if (isTitleUserDefined && localEbookState.title && !localEbookState.topic) {
+            // 사용자가 제목을 직접 정한 경우: 주제 설명(topic)을 보완해 이후 단계가 동작하도록 함
+            localEbookState = {
+                ...localEbookState,
+                topic: [localEbookState.outcomePromise, localEbookState.readerPainPoint, topicKeyword].filter(Boolean).join(' / ') || localEbookState.title,
+            };
+            setEbook(localEbookState);
         }
 
-        
-        // --- PHASE 0.5: TITLE GENERATION ---
-        if (currentStep <= AppStep.TITLE_GENERATION) {
+
+        // --- PHASE 0.5: TITLE GENERATION (사용자가 제목을 직접 정했으면 건너뜀) ---
+        if (currentStep <= AppStep.TITLE_GENERATION && !isTitleUserDefined) {
             setCurrentStep(AppStep.TITLE_GENERATION);
             setLoadingMessage('AI가 후킹성 있는 매력적인 제목을 생성하고 있습니다...');
             setAutomationProgress(8);
-            
-            const titles = await geminiService.generateTitles(localEbookState.title, localEbookState.topic, localEbookState.authorExpertise, localEbookState.bookStyle);
+
+            const titles = await geminiService.generateTitles(localEbookState.title, localEbookState.topic, localEbookState.authorExpertise, localEbookState.bookStyle, localEbookState.titleHookStyle, localEbookState.outcomePromise, localEbookState.readerPainPoint);
             if (titles && titles.length > 0) {
                setTitleIdeas(titles);
                localEbookState = { ...localEbookState, title: titles[0] }; // pick the first one
@@ -426,7 +461,7 @@ const App: React.FC = () => {
             setLoadingMessage('Gemini가 체계적인 목차를 기획하고 있습니다...');
             setAutomationProgress(20);
             
-            const outline = await geminiService.generateOutline(localEbookState.title, localEbookState.targetAudience, localEbookState.pageCount, localEbookState.coreMessage, localEbookState.toneAndManner, localEbookState.referenceContent);
+            const outline = await geminiService.generateOutline(localEbookState.title, localEbookState.targetAudience, localEbookState.pageCount, localEbookState.coreMessage, localEbookState.toneAndManner, localEbookState.referenceContent, localEbookState.outcomePromise, localEbookState.readerPainPoint);
             localEbookState = {
                 ...localEbookState,
                 outline,
@@ -456,7 +491,9 @@ const App: React.FC = () => {
                     localEbookState.author,
                     localEbookState.coreMessage,
                     localEbookState.toneAndManner,
-                    localEbookState.referenceContent
+                    localEbookState.referenceContent,
+                    localEbookState.outcomePromise,
+                    localEbookState.readerPainPoint
                 );
                 writtenChapters[i].content = content;
                 localEbookState = { ...localEbookState, chapters: [...writtenChapters] };
@@ -484,8 +521,9 @@ const App: React.FC = () => {
             setLoadingMessage('표지에 한국어 타이틀과 저자 정보를 선명하게 디자인 중입니다...');
             try {
                 const composited = await overlayTextOnCover(coverImage, localEbookState.title, authorToUse, {
-                    subtitle: localEbookState.coreMessage,
-                    description: localEbookState.topic,
+                    subtitle: localEbookState.coreMessage || localEbookState.readerPainPoint,
+                    description: localEbookState.outcomePromise || localEbookState.topic,
+                    themeKey: localEbookState.coverTheme,
                 });
                 coverImage = composited;
             } catch (overlayErr) {
@@ -554,7 +592,8 @@ const App: React.FC = () => {
       chapters: []
     }));
     setSelectedTopicIdx(idx);
-    
+    setIsTitleUserDefined(false); // AI 주제 선택 시에는 제목도 AI 흐름을 따름
+
     // Now transition to TITLE_GENERATION
     setTimeout(() => setCurrentStep(AppStep.TITLE_GENERATION), 500);
   };
@@ -563,13 +602,52 @@ const App: React.FC = () => {
 
 
 
+  // 첫 화면에서 키워드/페인포인트/얻는 변화 등을 바탕으로 제목을 추천
+  const handleRecommendTitles = async () => {
+    const hasContext = topicKeyword || ebook.title || ebook.outcomePromise || ebook.readerPainPoint || attachedFiles.length > 0;
+    if (!hasContext) {
+      setGlobalError('제목을 추천받으려면 주제 키워드나 "독자가 얻는 변화" 등을 먼저 입력해주세요.');
+      return;
+    }
+    setTitleLoading(true);
+    setLoadingMessage('AI가 매력적인 제목을 추천하고 있습니다...');
+    setSelectedTitleIdx(null);
+    try {
+      const baseTitle = ebook.title || topicKeyword;
+      const baseDesc = [ebook.outcomePromise, ebook.readerPainPoint, ebook.referenceContent, topicKeyword]
+        .filter(Boolean)
+        .join(' / ') || topicKeyword;
+      const titles = await geminiService.generateTitles(
+        baseTitle,
+        baseDesc,
+        ebook.authorExpertise,
+        ebook.bookStyle,
+        ebook.titleHookStyle,
+        ebook.outcomePromise,
+        ebook.readerPainPoint
+      );
+      setTitleIdeas(titles);
+    } catch (e) {
+      setGlobalError(getFriendlyErrorMessage(e, '제목 추천 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.'));
+    } finally {
+      setTitleLoading(false);
+    }
+  };
+
+  // 추천된 제목 중 하나를 첫 화면에서 선택
+  const selectRecommendedTitle = (title: string, idx: number) => {
+    setEbook(prev => ({ ...prev, title }));
+    setSelectedTitleIdx(idx);
+    setIsTitleUserDefined(true);
+  };
+
   const handleGenerateTitles = async () => {
     if (!ebook.topic) return;
     setLoading(true);
     setLoadingMessage('Gemini 3 Pro가 트렌디하고 매력적인 제목을 브레인스토밍 중입니다...');
     setSelectedTitleIdx(null);
     try {
-      const titles = await geminiService.generateTitles(ebook.title, ebook.topic, ebook.authorExpertise, ebook.bookStyle);
+      const titles = await geminiService.generateTitles(ebook.title, ebook.topic, ebook.authorExpertise, ebook.bookStyle, ebook.titleHookStyle, ebook.outcomePromise, ebook.readerPainPoint);
       setTitleIdeas(titles);
     } catch (e: any) {
       console.error("Error generating titles:", e);
@@ -611,7 +689,7 @@ const App: React.FC = () => {
     setLoading(true);
     setLoadingMessage('Gemini가 책의 구조를 논리적으로 기획하고 있습니다 (Thinking)...');
     try {
-      const outline = await geminiService.generateOutline(titleToUse, audienceToUse, ebook.pageCount, ebook.coreMessage, ebook.toneAndManner, ebook.referenceContent);
+      const outline = await geminiService.generateOutline(titleToUse, audienceToUse, ebook.pageCount, ebook.coreMessage, ebook.toneAndManner, ebook.referenceContent, ebook.outcomePromise, ebook.readerPainPoint);
       setEbook(prev => ({ 
         ...prev, 
         outline,
@@ -641,7 +719,7 @@ const App: React.FC = () => {
     try {
       for (let i = 0; i < newChapters.length; i++) {
         setLoadingMessage(`'${newChapters[i].title}' 챕터 작성 중... (${i + 1}/${newChapters.length})`);
-        const content = await geminiService.generateChapterContent(ebook.title, newChapters[i].title, ebook.outline, ebook.author, ebook.coreMessage, ebook.toneAndManner, ebook.referenceContent);
+        const content = await geminiService.generateChapterContent(ebook.title, newChapters[i].title, ebook.outline, ebook.author, ebook.coreMessage, ebook.toneAndManner, ebook.referenceContent, ebook.outcomePromise, ebook.readerPainPoint);
         newChapters[i].content = content;
         setEbook(prev => ({ ...prev, chapters: [...newChapters] }));
         setWritingProgress(((i + 1) / newChapters.length) * 100);
@@ -666,8 +744,9 @@ const App: React.FC = () => {
       setLoadingMessage('표지에 한국어 타이틀과 저자 정보를 선명하게 디자인 중입니다...');
       try {
         const composited = await overlayTextOnCover(base64Image, ebook.title, authorToUse, {
-          subtitle: ebook.coreMessage,
-          description: ebook.topic,
+          subtitle: ebook.coreMessage || ebook.readerPainPoint,
+          description: ebook.outcomePromise || ebook.topic,
+          themeKey: ebook.coverTheme,
         });
         base64Image = composited;
       } catch (overlayErr) {
@@ -822,6 +901,55 @@ const App: React.FC = () => {
           </div>
         </div>
 
+        {/* E-Book Title (직접 입력 또는 추천) */}
+        <div className="p-5 bg-white rounded-2xl border-2 border-indigo-200 space-y-3 shadow-sm">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <label className="font-bold text-slate-800 text-sm flex items-center gap-2">
+              <PenTool size={16} className="text-indigo-600" />
+              전자책 제목 (직접 정하거나, 추천받을 수 있어요)
+            </label>
+            <button
+              type="button"
+              onClick={handleRecommendTitles}
+              disabled={titleLoading || loading}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-bold border border-indigo-200 hover:bg-indigo-100 disabled:opacity-50 transition-colors whitespace-nowrap"
+            >
+              {titleLoading ? <Loader2 className="animate-spin" size={16} /> : <Sparkles size={16} />}
+              {titleLoading ? '추천 중...' : '제목 추천받기'}
+            </button>
+          </div>
+          <input
+            type="text"
+            value={ebook.title}
+            onChange={(e) => { setEbook(prev => ({...prev, title: e.target.value})); setIsTitleUserDefined(e.target.value.trim().length > 0); }}
+            placeholder="원하는 제목을 직접 입력하세요 (비워두면 AI가 자동으로 정합니다)"
+            className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-lg shadow-sm"
+          />
+
+          {titleIdeas.length > 0 && (
+            <div className="space-y-2 pt-1">
+              <p className="text-xs font-semibold text-slate-500 ml-1">추천 제목 (클릭하면 적용됩니다)</p>
+              <div className="flex flex-col gap-2">
+                {titleIdeas.map((title, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => selectRecommendedTitle(title, idx)}
+                    className={`text-left px-4 py-2.5 rounded-xl border transition-all flex items-center justify-between gap-3 ${
+                      ebook.title === title
+                        ? 'border-indigo-500 bg-indigo-50/60 ring-2 ring-indigo-500/20'
+                        : 'border-slate-200 bg-white hover:border-indigo-300 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="font-medium text-slate-800">{title}</span>
+                    {ebook.title === title && <CheckCircle2 size={18} className="text-indigo-600 shrink-0" />}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Expertise and Style Options (For High-Quality) */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="relative">
@@ -844,6 +972,112 @@ const App: React.FC = () => {
               placeholder="예: 노하우/실무서, 에세이, PDF 강의형 등" 
               className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-lg shadow-sm"
             />
+          </div>
+        </div>
+
+        {/* Reader Pain Point & Outcome Promise (매력도 핵심) */}
+        <div className="p-5 bg-indigo-50/60 rounded-2xl border border-indigo-100 space-y-4">
+          <div className="flex items-center gap-2 text-indigo-900 font-bold text-sm">
+            <Sparkles size={16} className="text-indigo-600" />
+            매력도 핵심 설정 (입력할수록 후킹·몰입도가 올라갑니다)
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="relative">
+              <label className="block text-sm font-medium text-slate-700 mb-1 ml-1">독자의 핵심 고민 (선택)</label>
+              <input
+                type="text"
+                value={ebook.readerPainPoint || ''}
+                onChange={(e) => setEbook(prev => ({...prev, readerPainPoint: e.target.value}))}
+                placeholder="예: 보고서를 만들 때마다 디자인이 막막하다"
+                className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-base shadow-sm"
+              />
+            </div>
+            <div className="relative">
+              <label className="block text-sm font-medium text-slate-700 mb-1 ml-1">독자가 얻는 변화/약속 (선택)</label>
+              <input
+                type="text"
+                value={ebook.outcomePromise || ''}
+                onChange={(e) => setEbook(prev => ({...prev, outcomePromise: e.target.value}))}
+                placeholder="예: 30분 만에 합격하는 보고서를 만들 수 있다"
+                className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-base shadow-sm"
+              />
+            </div>
+          </div>
+
+          {/* Tone presets */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2 ml-1">톤앤매너 (선택)</label>
+            <div className="flex flex-wrap gap-2">
+              {TONE_PRESETS.map((tone) => (
+                <button
+                  key={tone}
+                  type="button"
+                  onClick={() => setEbook(prev => ({...prev, toneAndManner: prev.toneAndManner === tone ? '' : tone}))}
+                  className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                    ebook.toneAndManner === tone
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                      : 'bg-white text-slate-600 border-slate-300 hover:border-indigo-400 hover:text-indigo-600'
+                  }`}
+                >
+                  {tone}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Title hook style */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2 ml-1">제목 후킹 스타일 (선택)</label>
+            <div className="flex flex-wrap gap-2">
+              {TITLE_HOOK_STYLES.map((style) => (
+                <button
+                  key={style.key || 'auto'}
+                  type="button"
+                  onClick={() => setEbook(prev => ({...prev, titleHookStyle: style.key}))}
+                  className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                    (ebook.titleHookStyle || '') === style.key
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                      : 'bg-white text-slate-600 border-slate-300 hover:border-indigo-400 hover:text-indigo-600'
+                  }`}
+                >
+                  {style.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Cover theme */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2 ml-1">표지 무드/컬러 (선택)</label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setEbook(prev => ({...prev, coverTheme: 'auto'}))}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                  (ebook.coverTheme || 'auto') === 'auto'
+                    ? 'bg-slate-800 text-white border-slate-800 shadow-sm'
+                    : 'bg-white text-slate-600 border-slate-300 hover:border-slate-500'
+                }`}
+              >
+                자동
+              </button>
+              {COVER_THEMES.map((theme) => (
+                <button
+                  key={theme.key}
+                  type="button"
+                  onClick={() => setEbook(prev => ({...prev, coverTheme: theme.key}))}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                    ebook.coverTheme === theme.key
+                      ? 'text-white border-transparent shadow-sm'
+                      : 'bg-white text-slate-600 border-slate-300 hover:border-slate-500'
+                  }`}
+                  style={ebook.coverTheme === theme.key ? { backgroundColor: theme.swatch } : undefined}
+                >
+                  <span className="w-3 h-3 rounded-full border border-black/10" style={{ backgroundColor: theme.swatch }} />
+                  {theme.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -1460,8 +1694,10 @@ const App: React.FC = () => {
                             </figure>
                         )}
 
-                        <div className="mt-6 text-justify leading-relaxed whitespace-pre-wrap font-sans">
-                            {renderFormattedContent(chapter.content)}
+                        <div className="mt-6 text-justify leading-relaxed font-sans space-y-4">
+                            {splitIntoParagraphs(chapter.content).map((para, pIdx) => (
+                                <p key={pIdx}>{renderFormattedContent(para)}</p>
+                            ))}
                         </div>
                     </article>
                 ))}
@@ -1490,8 +1726,17 @@ const App: React.FC = () => {
     const handleProceed = () => {
       switch(currentStep) {
         case AppStep.TOPIC_SELECTION:
-          if (ebook.topic) setCurrentStep(AppStep.TITLE_GENERATION);
-          else setGlobalError('주제를 먼저 선택해주세요.');
+          if (isTitleUserDefined && ebook.title) {
+            // 사용자가 제목을 직접 정함 → 주제 설명 보완 후 독자 설정 단계로 이동
+            if (!ebook.topic) {
+              setEbook(prev => ({ ...prev, topic: [prev.outcomePromise, prev.readerPainPoint, topicKeyword].filter(Boolean).join(' / ') || prev.title }));
+            }
+            setCurrentStep(AppStep.AUDIENCE_SETTING);
+          } else if (ebook.topic) {
+            setCurrentStep(AppStep.TITLE_GENERATION);
+          } else {
+            setGlobalError('주제를 선택하거나 제목을 직접 입력해주세요.');
+          }
           break;
         case AppStep.TITLE_GENERATION:
           if (ebook.title) setCurrentStep(AppStep.AUDIENCE_SETTING);
