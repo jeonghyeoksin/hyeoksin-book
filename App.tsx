@@ -4,7 +4,7 @@ import { AppStep, EBookState, GeneratedTopic, Chapter } from './types';
 import * as geminiService from './services/geminiService';
 import { generateAndDownloadDocx } from './utils/docxGenerator';
 import { generateCoverPdf, generateEbookPdf } from './utils/pdfGenerator';
-import { overlayTextOnCover, COVER_THEMES } from './utils/coverGenerator';
+import { overlayTextOnCover, extractThemeFromImage, COVER_THEMES, COVER_LAYOUTS } from './utils/coverGenerator';
 import { splitIntoParagraphs } from './utils/textFormat';
 import { 
   ArrowRight, 
@@ -30,7 +30,8 @@ import {
   EyeOff,
   ChevronLeft,
   ChevronRight,
-  Copy
+  Copy,
+  Upload
 } from 'lucide-react';
 import { ApiCostModal } from './components/ApiCostModal';
 import { PatchNotesModal } from './components/PatchNotesModal';
@@ -158,6 +159,7 @@ const App: React.FC = () => {
     outcomePromise: '',
     readerPainPoint: '',
     coverTheme: 'auto',
+    coverLayout: 'auto',
     titleHookStyle: '',
     outline: [],
     chapters: [],
@@ -268,6 +270,29 @@ const App: React.FC = () => {
 
   const removeFile = (index: number) => {
     setAttachedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleReferenceCoverChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const result = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const base64Data = result.split(',')[1] || '';
+      setEbook(prev => ({ ...prev, referenceCoverImage: base64Data }));
+    } catch (error) {
+      console.error("Error reading reference cover image:", error);
+    } finally {
+      e.target.value = '';
+    }
+  };
+
+  const removeReferenceCover = () => {
+    setEbook(prev => ({ ...prev, referenceCoverImage: undefined }));
   };
 
   // --- Error Handling Helper ---
@@ -516,20 +541,25 @@ const App: React.FC = () => {
             
             setLoadingMessage('표지 이미지를 렌더링 중입니다...');
             setAutomationProgress(85);
-            let coverImage = await geminiService.generateImage(coverPrompt, '3:4');
-            
+            let coverImage = await geminiService.generateImage(coverPrompt, '3:4', undefined, localEbookState.referenceCoverImage);
+
             setLoadingMessage('표지에 한국어 타이틀과 저자 정보를 선명하게 디자인 중입니다...');
             try {
+                const customTheme = localEbookState.referenceCoverImage
+                    ? await extractThemeFromImage(localEbookState.referenceCoverImage).catch(() => undefined)
+                    : undefined;
                 const composited = await overlayTextOnCover(coverImage, localEbookState.title, authorToUse, {
                     subtitle: localEbookState.coreMessage || localEbookState.readerPainPoint,
                     description: localEbookState.outcomePromise || localEbookState.topic,
                     themeKey: localEbookState.coverTheme,
+                    layoutKey: localEbookState.coverLayout,
+                    customTheme,
                 });
                 coverImage = composited;
             } catch (overlayErr) {
                 console.error("Failed to apply text overlay onto cover background:", overlayErr);
             }
-            
+
             localEbookState = { ...localEbookState, coverPrompt, coverImage };
             setEbook(localEbookState);
             setAutomationProgress(90);
@@ -739,14 +769,19 @@ const App: React.FC = () => {
       const prompt = await geminiService.generateImagePrompt(`Title: ${ebook.title}, Topic: ${ebook.topic}, Author: ${authorToUse}`, 'cover');
       setEbook(prev => ({ ...prev, coverPrompt: prompt }));
       
-      let base64Image = await geminiService.generateImage(prompt, '3:4');
+      let base64Image = await geminiService.generateImage(prompt, '3:4', undefined, ebook.referenceCoverImage);
 
       setLoadingMessage('표지에 한국어 타이틀과 저자 정보를 선명하게 디자인 중입니다...');
       try {
+        const customTheme = ebook.referenceCoverImage
+          ? await extractThemeFromImage(ebook.referenceCoverImage).catch(() => undefined)
+          : undefined;
         const composited = await overlayTextOnCover(base64Image, ebook.title, authorToUse, {
           subtitle: ebook.coreMessage || ebook.readerPainPoint,
           description: ebook.outcomePromise || ebook.topic,
           themeKey: ebook.coverTheme,
+          layoutKey: ebook.coverLayout,
+          customTheme,
         });
         base64Image = composited;
       } catch (overlayErr) {
@@ -1078,6 +1113,40 @@ const App: React.FC = () => {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Cover layout */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2 ml-1">표지 레이아웃 (선택)</label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setEbook(prev => ({...prev, coverLayout: 'auto'}))}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                  (ebook.coverLayout || 'auto') === 'auto'
+                    ? 'bg-slate-800 text-white border-slate-800 shadow-sm'
+                    : 'bg-white text-slate-600 border-slate-300 hover:border-slate-500'
+                }`}
+              >
+                자동
+              </button>
+              {COVER_LAYOUTS.map((layout) => (
+                <button
+                  key={layout.key}
+                  type="button"
+                  title={layout.description}
+                  onClick={() => setEbook(prev => ({...prev, coverLayout: layout.key}))}
+                  className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                    ebook.coverLayout === layout.key
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                      : 'bg-white text-slate-600 border-slate-300 hover:border-indigo-400 hover:text-indigo-600'
+                  }`}
+                >
+                  {layout.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-slate-400 mt-1.5 ml-1">표지 디자인이 매번 비슷하게 느껴진다면, 레이아웃을 직접 바꿔보세요.</p>
           </div>
         </div>
 
@@ -1481,6 +1550,97 @@ const App: React.FC = () => {
                             {loading && <p className="text-center text-sm text-slate-500">다음 단계로 자동 진행 중...</p>}
                         </>
                     )}
+                </div>
+            </div>
+
+            <div className="flex-1 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 w-full max-w-md mx-auto space-y-6">
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">참고 표지 이미지 (선택)</label>
+                    <p className="text-xs text-slate-400 mb-3">마음에 드는 표지 이미지를 올리면, 그 화풍·색감을 참고해서 표지를 다시 생성합니다.</p>
+                    <div className="flex items-center gap-4">
+                        {ebook.referenceCoverImage ? (
+                            <div className="relative w-24 aspect-[210/297] rounded-lg overflow-hidden border border-slate-200 shrink-0">
+                                <img src={`data:image/png;base64,${ebook.referenceCoverImage}`} alt="참고 표지" className="w-full h-full object-cover" />
+                                <button onClick={removeReferenceCover} className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-1 hover:bg-black/80">
+                                    <X size={12} />
+                                </button>
+                            </div>
+                        ) : (
+                            <label className="flex flex-col items-center justify-center gap-1.5 w-24 aspect-[210/297] rounded-lg border-2 border-dashed border-slate-300 text-slate-400 hover:border-indigo-400 hover:text-indigo-500 cursor-pointer transition-colors shrink-0">
+                                <Upload size={18} />
+                                <span className="text-[11px] text-center px-1">이미지 업로드</span>
+                                <input type="file" accept="image/*" className="hidden" onChange={handleReferenceCoverChange} />
+                            </label>
+                        )}
+                        {ebook.referenceCoverImage && (
+                            <p className="text-xs text-slate-500">참고 이미지가 적용됩니다.<br/>&quot;다시 생성&quot;을 눌러 반영하세요.</p>
+                        )}
+                    </div>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">표지 레이아웃</label>
+                    <div className="flex flex-wrap gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setEbook(prev => ({...prev, coverLayout: 'auto'}))}
+                            className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                                (ebook.coverLayout || 'auto') === 'auto'
+                                    ? 'bg-slate-800 text-white border-slate-800 shadow-sm'
+                                    : 'bg-white text-slate-600 border-slate-300 hover:border-slate-500'
+                            }`}
+                        >
+                            자동
+                        </button>
+                        {COVER_LAYOUTS.map((layout) => (
+                            <button
+                                key={layout.key}
+                                type="button"
+                                title={layout.description}
+                                onClick={() => setEbook(prev => ({...prev, coverLayout: layout.key}))}
+                                className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                                    ebook.coverLayout === layout.key
+                                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                                        : 'bg-white text-slate-600 border-slate-300 hover:border-indigo-400 hover:text-indigo-600'
+                                }`}
+                            >
+                                {layout.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">표지 무드/컬러</label>
+                    <div className="flex flex-wrap gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setEbook(prev => ({...prev, coverTheme: 'auto'}))}
+                            className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                                (ebook.coverTheme || 'auto') === 'auto'
+                                    ? 'bg-slate-800 text-white border-slate-800 shadow-sm'
+                                    : 'bg-white text-slate-600 border-slate-300 hover:border-slate-500'
+                            }`}
+                        >
+                            자동
+                        </button>
+                        {COVER_THEMES.map((theme) => (
+                            <button
+                                key={theme.key}
+                                type="button"
+                                onClick={() => setEbook(prev => ({...prev, coverTheme: theme.key}))}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                                    ebook.coverTheme === theme.key
+                                        ? 'text-white border-transparent shadow-sm'
+                                        : 'bg-white text-slate-600 border-slate-300 hover:border-slate-500'
+                                }`}
+                                style={ebook.coverTheme === theme.key ? { backgroundColor: theme.swatch } : undefined}
+                            >
+                                <span className="w-3 h-3 rounded-full border border-black/10" style={{ backgroundColor: theme.swatch }} />
+                                {theme.label}
+                            </button>
+                        ))}
+                    </div>
                 </div>
             </div>
         </div>
